@@ -624,15 +624,21 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
       )
     ) {
       meta.logger.info("Running postprocessor " + postprocessor.name);
-      engineResult = await postprocessor.run(
-        {
-          ...meta,
-          logger: meta.logger.child({
-            method: "postprocessors/" + postprocessor.name,
-          }),
-        },
-        engineResult,
-      );
+      try {
+        engineResult = await postprocessor.run(
+          {
+            ...meta,
+            logger: meta.logger.child({
+              method: "postprocessors/" + postprocessor.name,
+            }),
+          },
+          engineResult,
+        );
+      } catch (error) {
+        meta.logger.warn("Failed to run postprocessor " + postprocessor.name, {
+          error,
+        });
+      }
     }
   }
 
