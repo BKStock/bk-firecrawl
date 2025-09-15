@@ -14,6 +14,33 @@ function getDocumentTypeFromUrl(url: string): DocumentType {
   return DocumentType.Docx; // hope for the best
 }
 
+function getDocumentTypeFromContentType(
+  contentType: string | null,
+): DocumentType | null {
+  if (!contentType) return null;
+
+  const ct = contentType.toLowerCase();
+
+  if (
+    ct.includes(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ) ||
+    ct.includes("application/msword")
+  ) {
+    return DocumentType.Docx;
+  }
+
+  if (ct.includes("application/vnd.oasis.opendocument.text")) {
+    return DocumentType.Odt;
+  }
+
+  if (ct.includes("application/rtf") || ct.includes("text/rtf")) {
+    return DocumentType.Rtf;
+  }
+
+  return null;
+}
+
 export async function scrapeDocument(meta: Meta): Promise<EngineScrapeResult> {
   const { response, buffer } = await fetchFileToBuffer(
     meta.rewrittenUrl ?? meta.url,
@@ -23,7 +50,10 @@ export async function scrapeDocument(meta: Meta): Promise<EngineScrapeResult> {
     },
   );
 
-  const documentType = getDocumentTypeFromUrl(response.url);
+  const documentType =
+    getDocumentTypeFromContentType(response.headers.get("content-type")) ??
+    getDocumentTypeFromUrl(response.url);
+
   const html = await converter.convertBufferToHtml(
     new Uint8Array(buffer),
     documentType,
