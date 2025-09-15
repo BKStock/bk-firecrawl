@@ -147,15 +147,16 @@ function buildFeatureFlags(
   }
 
   const urlO = new URL(url);
+  const lowerPath = urlO.pathname.toLowerCase();
 
-  if (urlO.pathname.endsWith(".pdf")) {
+  if (lowerPath.endsWith(".pdf")) {
     flags.add("pdf");
   }
 
   if (
-    urlO.pathname.endsWith(".docx") ||
-    urlO.pathname.endsWith(".odt") ||
-    urlO.pathname.endsWith(".rtf")
+    lowerPath.endsWith(".docx") ||
+    lowerPath.endsWith(".odt") ||
+    lowerPath.endsWith(".rtf")
   ) {
     flags.add("document");
   }

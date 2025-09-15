@@ -7,9 +7,9 @@ const converter = new DocumentConverter();
 
 function getDocumentTypeFromUrl(url: string): DocumentType {
   const urlLower = url.toLowerCase();
-  if (urlLower.includes(".docx")) return DocumentType.Docx;
-  if (urlLower.includes(".odt")) return DocumentType.Odt;
-  if (urlLower.includes(".rtf")) return DocumentType.Rtf;
+  if (urlLower.endsWith(".docx")) return DocumentType.Docx;
+  if (urlLower.endsWith(".odt")) return DocumentType.Odt;
+  if (urlLower.endsWith(".rtf")) return DocumentType.Rtf;
 
   return DocumentType.Docx; // hope for the best
 }
