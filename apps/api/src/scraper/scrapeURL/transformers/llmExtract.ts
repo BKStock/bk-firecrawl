@@ -699,6 +699,11 @@ export async function generateCompletions({
             : {}),
         },
       },
+      ...(currentModel.modelId.startsWith("gpt-5")
+        ? {
+            temperature: 1,
+          }
+        : {}),
     } satisfies Parameters<typeof generateObject>[0];
 
     // const now = new Date().getTime();
@@ -1090,6 +1095,11 @@ export async function performSummary(
         functionId: "performSummary",
         scrapeId: meta.id,
       },
+      providerOptions: {
+        openai: {
+          reasoning: { effort: "minimal" },
+        },
+      } as any,
     };
 
     const { extract, warning, totalUsage, model } =
