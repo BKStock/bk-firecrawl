@@ -35,7 +35,9 @@ export async function logJob(
 
     // Save to BigQuery if configured
     if (process.env.BIGQUERY_DATASET_ID) {
-      await saveJobToBigQuery(job, force);
+       saveJobToBigQuery(job, force).catch(error => {
+        logger.error("Error saving job to BigQuery", { error });
+      });
     }
 
     const useDbAuthentication = process.env.USE_DB_AUTHENTICATION === "true";
