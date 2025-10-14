@@ -1463,7 +1463,7 @@ export const searchRequestSchema = z
       ])
       .optional(),
     lang: z.string().optional().default("en"),
-    country: z.string().optional().default("us"),
+    country: z.string().optional(),
     location: z.string().optional(),
     origin: z.string().optional().default("api"),
     integration: integrationSchema.optional().transform(val => val || null),
@@ -1510,7 +1510,7 @@ export const searchRequestSchema = z
   )
   .refine(x => waitForRefine(x.scrapeOptions), waitForRefineOpts)
   .transform(x => {
-    const country = x.location ? undefined : x.country;
+    const country = x.location ? undefined : (x.country ?? "us");
 
     // Transform string array sources to object format
     let sources = x.sources;
