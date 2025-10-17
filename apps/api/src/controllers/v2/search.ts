@@ -321,8 +321,8 @@ export async function searchController(
     const isAsyncScraping = req.body.asyncScraping && shouldScrape;
 
     if (!shouldScrape) {
-      // No scraping - flat 2 credits for 1-10 search results
-      credits_billed = 2;
+      // No scraping - 2 credits per 10 search results
+      credits_billed = Math.ceil(totalResultsCount / 10) * 2;
     } else {
       // Common setup for both async and sync scraping
       logger.info(
