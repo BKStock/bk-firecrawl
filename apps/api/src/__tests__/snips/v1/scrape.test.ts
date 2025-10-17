@@ -1628,6 +1628,7 @@ describe("Scrape tests", () => {
                 },
                 additionalProperties: true,
               },
+              origin: "api-sdk",
             },
             identity,
           );
@@ -1696,32 +1697,34 @@ describe("Scrape tests", () => {
         scrapeTimeout,
       );
 
-      it(
-        "should normalize changeTracking with additionalProperties in schema",
-        async () => {
-          const identity = await idmux({ name: "schema-validation-test" });
+      if (!process.env.TEST_SUITE_SELF_HOSTED) {
+        it(
+          "should normalize changeTracking with additionalProperties in schema",
+          async () => {
+            const identity = await idmux({ name: "schema-validation-test" });
 
-          const response = await scrapeRaw(
-            {
-              url: "https://example.com",
-              formats: ["markdown", "changeTracking"],
-              changeTrackingOptions: {
-                schema: {
-                  type: "object",
-                  properties: {
-                    changes: { type: "string" },
+            const response = await scrapeRaw(
+              {
+                url: "https://example.com",
+                formats: ["markdown", "changeTracking"],
+                changeTrackingOptions: {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      changes: { type: "string" },
+                    },
+                    additionalProperties: true,
                   },
-                  additionalProperties: true,
                 },
               },
-            },
-            identity,
-          );
+              identity,
+            );
 
-          expect(response.statusCode).toBe(200);
-        },
-        scrapeTimeout,
-      );
+            expect(response.statusCode).toBe(200);
+          },
+          scrapeTimeout,
+        );
+      }
 
       it(
         "should reject schema-less dictionary (no properties but additionalProperties: true)",
