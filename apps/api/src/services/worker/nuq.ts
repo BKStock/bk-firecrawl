@@ -30,6 +30,7 @@ export type NuQJob<Data = any, ReturnValue = any> = {
   failedReason?: string;
   lock?: string;
   ownerId?: string;
+  groupId?: string;
 };
 
 const listenChannelId = process.env.NUQ_POD_NAME ?? "main";
@@ -44,6 +45,7 @@ type NuQJobOptions = {
   listenable?: boolean;
   priority?: number;
   ownerId?: string;
+  groupId?: string;
 };
 
 class NuQ<JobData = any, JobReturnValue = any> {
@@ -347,6 +349,7 @@ class NuQ<JobData = any, JobReturnValue = any> {
       failedReason: row.failedreason ?? undefined,
       lock: row.lock ?? undefined,
       ownerId: row.owner_id ?? undefined,
+      groupId: row.group_id ?? undefined,
     };
   }
 
@@ -518,6 +521,66 @@ class NuQ<JobData = any, JobReturnValue = any> {
   }
 
   // === Producer
+  public async tryAddJob(
+    id: string,
+    data: JobData,
+    options: NuQJobOptions = {},
+  ): Promise<NuQJob<JobData, JobReturnValue> | null> {
+    return withSpan("nuq.tryAddJob", async span => {
+      const bareOwnerId = options.ownerId ?? undefined;
+      const normalizedOwnerId = bareOwnerId
+        ? uuidValidate(bareOwnerId)
+          ? bareOwnerId
+          : uuidv5(bareOwnerId, "b208cbac-8bdf-4599-bf17-da78426e3f7c") // preview namespace
+        : null;
+
+      setSpanAttributes(span, {
+        "nuq.queue_name": this.queueName,
+        "nuq.job_id": id,
+        "nuq.priority": options.priority ?? 0,
+        "nuq.zero_data_retention": (data as any)?.zeroDataRetention ?? false,
+        "nuq.listenable": options.listenable ?? false,
+      });
+
+      const start = Date.now();
+      try {
+        const result = this.rowToJob(
+          (
+            await nuqPool.query(
+              `INSERT INTO ${this.queueName} (id, data, priority, listen_channel_id, owner_id, group_id) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING RETURNING ${this.jobReturning.join(", ")};`,
+              [
+                id,
+                data,
+                options.priority ?? 0,
+                options.listenable ? listenChannelId : null,
+                normalizedOwnerId ?? null,
+                options.groupId ?? null,
+              ],
+            )
+          ).rows[0],
+        )!;
+
+        setSpanAttributes(span, {
+          "nuq.job_created": result !== null,
+        });
+
+        return result;
+      } finally {
+        const duration = Date.now() - start;
+        setSpanAttributes(span, {
+          "nuq.duration_ms": duration,
+        });
+        logger.info("nuqAddJob metrics", {
+          module: "nuq/metrics",
+          method: "nuqAddJob",
+          duration,
+          scrapeId: id,
+          zeroDataRetention: (data as any)?.zeroDataRetention ?? false,
+        });
+      }
+    });
+  }
+
   public async addJob(
     id: string,
     data: JobData,
@@ -544,13 +607,14 @@ class NuQ<JobData = any, JobReturnValue = any> {
         const result = this.rowToJob(
           (
             await nuqPool.query(
-              `INSERT INTO ${this.queueName} (id, data, priority, listen_channel_id, owner_id) VALUES ($1, $2, $3, $4, $5) RETURNING ${this.jobReturning.join(", ")};`,
+              `INSERT INTO ${this.queueName} (id, data, priority, listen_channel_id, owner_id, group_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${this.jobReturning.join(", ")};`,
               [
                 id,
                 data,
                 options.priority ?? 0,
                 options.listenable ? listenChannelId : null,
                 normalizedOwnerId ?? null,
+                options.groupId ?? null,
               ],
             )
           ).rows[0],
