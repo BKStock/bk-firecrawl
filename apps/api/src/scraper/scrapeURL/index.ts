@@ -381,22 +381,27 @@ async function scrapeURLLoopIter(
       engine,
     );
 
-    let checkMarkdown = await parseMarkdown(
-      await htmlTransform(
-        engineResult.html,
-        meta.url,
-        scrapeOptions.parse({ onlyMainContent: true }),
-      ),
-    );
-
-    if (checkMarkdown.trim().length === 0) {
+    let checkMarkdown: string;
+    if (meta.internalOptions.teamId === "sitemap") {
+      checkMarkdown = engineResult.html?.trim() ?? "";
+    } else {
       checkMarkdown = await parseMarkdown(
         await htmlTransform(
           engineResult.html,
           meta.url,
-          scrapeOptions.parse({ onlyMainContent: false }),
+          scrapeOptions.parse({ onlyMainContent: true }),
         ),
       );
+
+      if (checkMarkdown.trim().length === 0) {
+        checkMarkdown = await parseMarkdown(
+          await htmlTransform(
+            engineResult.html,
+            meta.url,
+            scrapeOptions.parse({ onlyMainContent: false }),
+          ),
+        );
+      }
     }
 
     // Success factors
@@ -805,6 +810,7 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
           : warning;
     }
 
+    // TODO(delong3): for sitemap, we don't need all the transformers, need to skip unused ones
     document = await executeTransformers(meta, document);
 
     // Set final span attributes
