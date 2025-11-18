@@ -1198,10 +1198,15 @@ async function processJobWithTracing(job: NuQJob<ScrapeJobData>, logger: any) {
   } catch (error) {
     logger.warn("Job failed", { error });
     Sentry.captureException(error);
-    if (error instanceof TransportableError) {
-      throw new Error(serializeTransportableError(error));
+
+    if (job.data.skipNuq) {
+      throw error;
     } else {
-      throw new Error(serializeTransportableError(new UnknownError(error)));
+      if (error instanceof TransportableError) {
+        throw new Error(serializeTransportableError(error));
+      } else {
+        throw new Error(serializeTransportableError(new UnknownError(error)));
+      }
     }
   }
 }

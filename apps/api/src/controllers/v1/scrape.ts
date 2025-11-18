@@ -16,6 +16,7 @@ import { checkPermissions } from "../../lib/permissions";
 import { teamConcurrencySemaphore } from "../../services/worker/team-semaphore";
 import { processJobInternal } from "../../services/worker/scrape-worker";
 import { ScrapeJobData } from "../../types";
+import { AbortManagerThrownError } from "../../scraper/scrapeURL/lib/abortManager";
 
 export async function scrapeController(
   req: RequestWithAuth<{}, ScrapeResponse, ScrapeRequest>,

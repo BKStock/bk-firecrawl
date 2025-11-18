@@ -26,12 +26,24 @@ export class AbortManager {
     this.mappedController = null;
   }
 
+  private resolveInner(abort: AbortInstance): any {
+    try {
+      return abort.throwable();
+    } catch (err) {
+      return err;
+    }
+  }
+
   private register(abort: AbortInstance) {
     const handler = () => {
-      this.mappedController?.abort(
-        new AbortManagerThrownError(abort.tier, abort.throwable()),
-      );
+      if (!this.mappedController) return;
+
+      const inner = this.resolveInner(abort);
+      const reason = new AbortManagerThrownError(abort.tier, inner);
+
+      this.mappedController.abort(reason);
     };
+
     abort.signal.addEventListener("abort", handler);
     this.listeners.push({ signal: abort.signal, handler });
   }
@@ -66,7 +78,8 @@ export class AbortManager {
   throwIfAborted(): void {
     for (const abort of this.aborts) {
       if (abort.signal.aborted) {
-        throw new AbortManagerThrownError(abort.tier, abort.throwable());
+        const inner = this.resolveInner(abort);
+        throw new AbortManagerThrownError(abort.tier, inner);
       }
     }
   }

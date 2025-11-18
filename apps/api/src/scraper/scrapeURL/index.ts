@@ -681,6 +681,8 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
           } else if (error instanceof WaterfallNextEngineSignal) {
             // It's time to waterfall the next engine
             break;
+          } else if (error instanceof ScrapeJobTimeoutError) {
+            throw error;
           } else if (error instanceof AbortManagerThrownError) {
             if (error.tier === "engine") {
               meta.logger.warn(
