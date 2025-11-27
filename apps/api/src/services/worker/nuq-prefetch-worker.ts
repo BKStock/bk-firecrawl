@@ -1,8 +1,6 @@
 import "dotenv/config";
-import { shutdownOtel } from "../../otel";
 import "../sentry";
 import { setSentryServiceTag } from "../sentry";
-import * as Sentry from "@sentry/node";
 import {
   scrapeQueue,
   nuqGetLocalMetrics,
