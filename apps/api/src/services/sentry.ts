@@ -45,16 +45,6 @@ if (process.env.SENTRY_DSN) {
         if (transportableErrorCodes.includes(errorCode)) {
           return null;
         }
-
-        if (error.constructor?.name === "ZodError") {
-          const errorMessage = "message" in error ? String(error.message) : "";
-          if (
-            errorMessage.includes("Invalid url") ||
-            errorMessage.includes("Invalid URL")
-          ) {
-            return null;
-          }
-        }
       }
 
       return event;
