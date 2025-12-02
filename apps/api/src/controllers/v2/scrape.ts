@@ -2,12 +2,13 @@ import { Response } from "express";
 import { logger as _logger } from "../../lib/logger";
 import {
   Document,
+  FormatObject,
   RequestWithAuth,
   ScrapeRequest,
   scrapeRequestSchema,
   ScrapeResponse,
 } from "./types";
-import { v4 as uuidv4 } from "uuid";
+import { v7 as uuidv7 } from "uuid";
 import { hasFormatOfType } from "../../lib/format-utils";
 import { TransportableError } from "../../lib/error";
 import { NuQJob } from "../../services/worker/nuq";
@@ -30,7 +31,7 @@ export async function scrapeController(
         (req as any).requestTiming?.startTime || new Date().getTime();
       const controllerStartTime = new Date().getTime();
 
-      const jobId = uuidv4();
+      const jobId = uuidv7();
       const preNormalizedBody = { ...req.body };
 
       // Set initial span attributes
@@ -242,6 +243,17 @@ export async function scrapeController(
             });
           }
 
+          if (e.code === "SCRAPE_NO_CACHED_DATA") {
+            setSpanAttributes(span, {
+              "scrape.status_code": 404,
+            });
+            return res.status(404).json({
+              success: false,
+              code: e.code,
+              error: e.message,
+            });
+          }
+
           const statusCode = e.code === "SCRAPE_TIMEOUT" ? 408 : 500;
           setSpanAttributes(span, {
             "scrape.status_code": statusCode,
@@ -287,6 +299,22 @@ export async function scrapeController(
         "scrape.document.error": doc?.metadata?.error,
       });
 
+      let usedLlm =
+        !!hasFormatOfType(req.body.formats, "json") ||
+        !!hasFormatOfType(req.body.formats, "summary") ||
+        !!hasFormatOfType(req.body.formats, "branding");
+
+      if (!usedLlm) {
+        const ct = hasFormatOfType(req.body.formats, "changeTracking");
+
+        if (ct && ct.modes?.includes("json")) {
+          usedLlm = true;
+        }
+      }
+
+      const formats: string[] =
+        req.body.formats?.map((f: FormatObject) => f?.type) ?? [];
+
       logger.info("Request metrics", {
         version: "v2",
         scrapeId: jobId,
@@ -297,6 +325,8 @@ export async function scrapeController(
         controllerTime,
         totalRequestTime,
         totalWait,
+        usedLlm,
+        formats,
       });
 
       return res.status(200).json({

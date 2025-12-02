@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { shutdownOtel } from "./otel";
 import "./services/sentry";
+import { setSentryServiceTag } from "./services/sentry";
 import * as Sentry from "@sentry/node";
 import express, { NextFunction, Request, Response } from "express";
 import bodyParser from "body-parser";
@@ -26,7 +27,7 @@ import {
   ResponseWithSentry,
 } from "./controllers/v1/types";
 import { ZodError } from "zod";
-import { v4 as uuidv4 } from "uuid";
+import { v7 as uuidv7 } from "uuid";
 import { attachWsProxy } from "./services/agentLivecastWS";
 import { cacheableLookup } from "./scraper/scrapeURL/lib/cacheableLookup";
 import { v2Router } from "./routes/v2";
@@ -58,6 +59,8 @@ const ws = expressWs(expressApp);
 const app = ws.app;
 
 global.isProduction = process.env.IS_PRODUCTION === "true";
+
+setSentryServiceTag("api");
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json({ limit: "10mb" }));
@@ -214,7 +217,7 @@ app.use(
       });
     }
 
-    const id = res.sentry ?? uuidv4();
+    const id = res.sentry ?? uuidv7();
 
     logger.error(
       "Error occurred in request! (" + req.path + ") -- ID " + id + " -- ",

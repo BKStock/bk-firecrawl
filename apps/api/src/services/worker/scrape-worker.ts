@@ -10,7 +10,7 @@ import {
 } from "../../lib/concurrency-limit";
 import { addJobPriority, deleteJobPriority } from "../../lib/job-priority";
 import { cacheableLookup } from "../../scraper/scrapeURL/lib/cacheableLookup";
-import { v4 as uuidv4 } from "uuid";
+import { v7 as uuidv7 } from "uuid";
 import {
   addCrawlJob,
   addCrawlJobs,
@@ -51,6 +51,7 @@ import { calculateCreditsToBeBilled } from "../../lib/scrape-billing";
 import { getBillingQueue } from "../queue-service";
 import type { Logger } from "winston";
 import {
+  CrawlDenialError,
   RacedRedirectError,
   ScrapeJobTimeoutError,
   TransportableError,
@@ -110,7 +111,7 @@ async function billScrapeJob(
       process.env.USE_DB_AUTHENTICATION === "true"
     ) {
       try {
-        const billingJobId = uuidv4();
+        const billingJobId = uuidv7();
         logger.debug(
           `Adding billing job to queue for team ${job.data.team_id}`,
           {
@@ -285,7 +286,7 @@ async function processJob(job: NuQJob<ScrapeJobSingleUrls>) {
           const reason =
             filterResult.denialReason ||
             "Redirected target URL is not allowed by crawlOptions";
-          throw new Error(reason);
+          throw new CrawlDenialError(reason);
         }
 
         // Only re-set originUrl if it's different from the current hostname
@@ -308,7 +309,7 @@ async function processJob(job: NuQJob<ScrapeJobSingleUrls>) {
             (await getACUCTeam(job.data.team_id))?.flags ?? null,
           )
         ) {
-          throw new Error(BLOCKLISTED_URL_MESSAGE); // TODO: make this its own error type that is ignored by error tracking
+          throw new CrawlDenialError(BLOCKLISTED_URL_MESSAGE); // TODO: make this its own error type that is ignored by error tracking
         }
 
         const p1 = generateURLPermutations(normalizeURL(doc.metadata.url, sc));
@@ -372,7 +373,7 @@ async function processJob(job: NuQJob<ScrapeJobSingleUrls>) {
                 team_id: sc.team_id,
                 basePriority: job.data.crawl_id ? 20 : 10,
               });
-              const jobId = uuidv4();
+              const jobId = uuidv7();
 
               logger.debug(
                 "Determined job priority " +
@@ -432,7 +433,7 @@ async function processJob(job: NuQJob<ScrapeJobSingleUrls>) {
               const reason =
                 filterResult.denialReasons.get(url) ||
                 "Source URL is not allowed by crawl configuration";
-              throw new Error(reason);
+              throw new CrawlDenialError(reason);
             }
           }
         }
@@ -567,8 +568,8 @@ async function processJob(job: NuQJob<ScrapeJobSingleUrls>) {
       if (
         job.data.crawl_id &&
         job.data.crawlerOptions !== null &&
-        error instanceof Error &&
-        error.message === "URL blocked by robots.txt"
+        error instanceof CrawlDenialError &&
+        error.reason === "URL blocked by robots.txt"
       ) {
         await recordRobotsBlocked(job.data.crawl_id, job.data.url);
       }
@@ -606,11 +607,14 @@ async function processJob(job: NuQJob<ScrapeJobSingleUrls>) {
     } else {
       logger.error(`🐂 Job errored ${job.id} - ${error}`, { error });
 
-      Sentry.captureException(error, {
-        data: {
-          job: job.id,
-        },
-      });
+      // Filter out TransportableErrors (flow control)
+      if (!(error instanceof TransportableError)) {
+        Sentry.captureException(error, {
+          data: {
+            job: job.id,
+          },
+        });
+      }
 
       if (error instanceof CustomError) {
         // Here we handle the error, then save the failed job
@@ -779,7 +783,7 @@ async function addKickoffSitemapJob(
     return;
   }
 
-  const jobId = uuidv4();
+  const jobId = uuidv7();
   await _addScrapeJobToBullMQ(
     {
       mode: "kickoff_sitemap" as const,
@@ -828,7 +832,7 @@ async function processKickoffJob(job: NuQJob<ScrapeJobKickoff>) {
 
     logger.debug("Locking URL...");
     await lockURL(job.data.crawl_id, sc, job.data.url);
-    const jobId = uuidv4();
+    const jobId = uuidv7();
     logger.debug("Adding scrape job to Redis...", { jobId });
     await addScrapeJob(
       {
@@ -914,7 +918,7 @@ async function processKickoffJob(job: NuQJob<ScrapeJobKickoff>) {
       logger.debug("Using job priority " + jobPriority, { jobPriority });
 
       const jobs = indexLinks.map(url => {
-        const uuid = uuidv4();
+        const uuid = uuidv7();
         return {
           jobId: uuid,
           data: {
@@ -1040,7 +1044,7 @@ async function processKickoffSitemapJob(job: NuQJob<ScrapeJobKickoffSitemap>) {
             job.data.zeroDataRetention || (sc.zeroDataRetention ?? false),
           apiKeyId: job.data.apiKeyId,
         } satisfies ScrapeJobSingleUrls,
-        jobId: uuidv4(),
+        jobId: uuidv7(),
         priority: jobPriority,
       }));
 
@@ -1197,7 +1201,11 @@ async function processJobWithTracing(job: NuQJob<ScrapeJobData>, logger: any) {
     }
   } catch (error) {
     logger.warn("Job failed", { error });
-    Sentry.captureException(error);
+
+    // Filter out TransportableErrors (flow control)
+    if (!(error instanceof TransportableError)) {
+      Sentry.captureException(error);
+    }
 
     if (job.data.skipNuq) {
       throw error;

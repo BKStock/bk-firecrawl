@@ -35,6 +35,7 @@ import {
   SSLError,
   PDFInsufficientTimeError,
   IndexMissError,
+  NoCachedDataError,
   DNSResolutionError,
   ZDRViolationError,
   PDFPrefetchFailed,
@@ -69,7 +70,7 @@ import {
   AbortManager,
   AbortManagerThrownError,
 } from "./lib/abortManager";
-import { ScrapeJobTimeoutError } from "../../lib/error";
+import { ScrapeJobTimeoutError, CrawlDenialError } from "../../lib/error";
 import { htmlTransform } from "./lib/removeUnwantedElements";
 import { postprocessors } from "./postprocessors";
 
@@ -636,7 +637,8 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
               error.error instanceof PDFAntibotError ||
               error.error instanceof DocumentAntibotError ||
               error.error instanceof PDFInsufficientTimeError ||
-              error.error instanceof ProxySelectionError
+              error.error instanceof ProxySelectionError ||
+              error.error instanceof NoCachedDataError
             ) {
               throw error.error;
             } else if (error.error instanceof LLMRefusalError) {
@@ -923,10 +925,10 @@ export async function scrapeURL(
               setSpanAttributes(span, {
                 "scrape.blocked_by_robots": true,
               });
-              throw new Error("URL blocked by robots.txt");
+              throw new CrawlDenialError("URL blocked by robots.txt");
             }
           } catch (error) {
-            if (error.message === "URL blocked by robots.txt") {
+            if (error instanceof CrawlDenialError) {
               throw error;
             }
             meta.logger.debug("Failed to fetch robots.txt, allowing scrape", {
@@ -1197,7 +1199,7 @@ export async function scrapeURL(
         error.message.includes("Invalid schema for response_format")
       ) {
         errorType = "LLMSchemaError";
-        // TODO: seperate into custom error
+        // TODO: separate into custom error
         meta.logger.warn("scrapeURL: LLM schema error", { error });
         // TODO: results?
       } else if (error instanceof SiteError) {
@@ -1236,6 +1238,9 @@ export async function scrapeURL(
       } else if (error instanceof ProxySelectionError) {
         errorType = "ProxySelectionError";
         meta.logger.warn("scrapeURL: Proxy selection error", { error });
+      } else if (error instanceof DNSResolutionError) {
+        errorType = "DNSResolutionError";
+        meta.logger.warn("scrapeURL: DNS resolution error", { error });
       } else if (error instanceof AbortManagerThrownError) {
         errorType = "AbortManagerThrownError";
         throw error.inner;
