@@ -8,9 +8,9 @@ import {
   ScrapeOptions,
   TeamFlags,
 } from "./types";
-import { v4 as uuidv4 } from "uuid";
+import { v7 as uuidv7 } from "uuid";
 import { addScrapeJob, waitForJob } from "../../services/queue-jobs";
-import { logJob } from "../../services/logging/log_job";
+import { logSearch, logRequest } from "../../services/logging/log_job";
 import { search } from "../../search/v2";
 import { isUrlBlocked } from "../../scraper/WebScraper/utils/blocklist";
 import * as Sentry from "@sentry/node";
@@ -55,7 +55,7 @@ async function startX420ScrapeJob(
   directToBullMQ: boolean = false,
   isSearchPreview: boolean = false,
 ): Promise<string> {
-  const jobId = uuidv4();
+  const jobId = uuidv7();
 
   const zeroDataRetention = flags?.forceZDR ?? false;
 
@@ -151,9 +151,9 @@ async function scrapeX420SearchResult(
     if (process.env.USE_DB_AUTHENTICATION === "true") {
       const { data: costTrackingResponse, error: costTrackingError } =
         await supabase_service
-          .from("firecrawl_jobs")
+          .from("scrapes")
           .select("cost_tracking")
-          .eq("job_id", jobId);
+          .eq("id", jobId);
 
       if (costTrackingError) {
         logger.error("Error getting cost tracking [x402]", {
@@ -199,7 +199,7 @@ export async function x402SearchController(
   req: RequestWithAuth<{}, SearchResponse, SearchRequest>,
   res: Response<SearchResponse>,
 ) {
-  const jobId = uuidv4();
+  const jobId = uuidv7();
   let logger = _logger.child({
     jobId,
     teamId: req.auth.team_id,
@@ -237,6 +237,17 @@ export async function x402SearchController(
       origin: req.body.origin,
     });
 
+    await logRequest({
+      id: jobId,
+      kind: "search",
+      api_version: "v2",
+      team_id: req.auth.team_id,
+      origin: req.body.origin ?? "api",
+      integration: req.body.integration,
+      target_hint: req.body.query,
+      zeroDataRetention: false, // not supported for x402 search
+    });
+
     let limit = req.body.limit;
 
     // Buffer results by 50% to account for filtered URLs
@@ -265,6 +276,7 @@ export async function x402SearchController(
       country: req.body.country,
       location: req.body.location,
       type: searchTypes,
+      enterprise: req.body.enterprise,
     })) as SearchV2Response;
 
     // Add category labels to web results
@@ -314,7 +326,7 @@ export async function x402SearchController(
 
     // Check if scraping is requested
     const shouldScrape =
-      req.body.scrapeOptions.formats &&
+      req.body.scrapeOptions?.formats &&
       req.body.scrapeOptions.formats.length > 0;
     const isAsyncScraping = req.body.asyncScraping && shouldScrape;
 
@@ -327,12 +339,25 @@ export async function x402SearchController(
         `Starting ${isAsyncScraping ? "async" : "sync"} search scraping [x402]`,
       );
 
+      // Safely extract scrapeOptions with runtime check
+      if (!req.body.scrapeOptions) {
+        logger.error(
+          "scrapeOptions is undefined despite shouldScrape being true [x402]",
+        );
+        return res.status(500).json({
+          success: false,
+          error: "Internal server error: scrapeOptions is missing",
+        });
+      }
+
+      const bodyScrapeOptions = req.body.scrapeOptions;
+
       // Create common options
       const scrapeOptions = {
         teamId: req.auth.team_id,
         origin: req.body.origin,
         timeout: req.body.timeout,
-        scrapeOptions: req.body.scrapeOptions,
+        scrapeOptions: bodyScrapeOptions,
         bypassBilling: true, // Async mode bills per job, sync mode bills manually
         apiKeyId: req.acuc?.api_key_id ?? null,
       };
@@ -482,32 +507,26 @@ export async function x402SearchController(
           scrapeIds,
         });
 
-        logJob(
+        logSearch(
           {
-            job_id: jobId,
-            success: true,
-            num_docs:
-              (searchResponse.web?.length ?? 0) +
-              (searchResponse.images?.length ?? 0) +
-              (searchResponse.news?.length ?? 0),
-            docs: [searchResponse],
+            id: jobId,
+            request_id: jobId,
+            query: req.body.query,
+            is_successful: true,
+            error: undefined,
+            results: searchResponse as any,
+            num_results: totalResultsCount,
             time_taken: timeTakenInSeconds,
             team_id: req.auth.team_id,
-            mode: "search",
-            url: req.body.query,
-            scrapeOptions: req.body.scrapeOptions,
-            crawlerOptions: {
+            options: {
               ...req.body,
               query: undefined,
               scrapeOptions: undefined,
             },
-            origin: req.body.origin,
-            integration: req.body.integration,
-            credits_billed,
+            credits_cost: credits_billed,
             zeroDataRetention: false,
           },
           false,
-          isSearchPreview,
         );
 
         return res.status(200).json({
@@ -576,33 +595,22 @@ export async function x402SearchController(
       time_taken: timeTakenInSeconds,
     });
 
-    logJob(
+    logSearch(
       {
-        job_id: jobId,
-        success: true,
-        num_docs:
-          (searchResponse.web?.length ?? 0) +
-          (searchResponse.images?.length ?? 0) +
-          (searchResponse.news?.length ?? 0),
-        docs: [searchResponse],
+        id: jobId,
+        request_id: jobId,
+        query: req.body.query,
+        is_successful: true,
+        error: undefined,
+        results: searchResponse as any,
+        num_results: totalResultsCount,
         time_taken: timeTakenInSeconds,
         team_id: req.auth.team_id,
-        mode: "search",
-        url: req.body.query,
-        scrapeOptions: req.body.scrapeOptions,
-        crawlerOptions: {
-          ...req.body,
-          query: undefined,
-          scrapeOptions: undefined,
-          asyncScraping: isAsyncScraping,
-        },
-        origin: req.body.origin,
-        integration: req.body.integration,
-        credits_billed,
+        options: { ...req.body, scrapeOptions: undefined, query: undefined },
+        credits_cost: credits_billed,
         zeroDataRetention: false, // not supported
       },
       false,
-      isSearchPreview,
     );
 
     // For sync scraping or no scraping, don't include scrapeIds
@@ -613,11 +621,11 @@ export async function x402SearchController(
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      logger.warn("Invalid request body [x402]", { error: error.errors });
+      logger.warn("Invalid request body [x402]", { error: error.issues });
       return res.status(400).json({
         success: false,
         error: "Invalid request body",
-        details: error.errors,
+        details: error.issues,
       });
     }
 

@@ -1,3 +1,4 @@
+import { v7 as uuidv7 } from "uuid";
 import { Request, Response } from "express";
 import {
   RequestWithAuth,
@@ -16,8 +17,12 @@ import { performExtraction_F0 } from "../../lib/extract/fire-0/extraction-servic
 import { BLOCKLISTED_URL_MESSAGE } from "../../lib/strings";
 import { isUrlBlocked } from "../../scraper/WebScraper/utils/blocklist";
 import { logger as _logger } from "../../lib/logger";
-import { fromV1ScrapeOptions } from "../v2/types";
+import {
+  fromV1ScrapeOptions,
+  ExtractRequest as V2ExtractRequest,
+} from "../v2/types";
 import { createWebhookSender, WebhookEvent } from "../../services/webhook";
+import { logRequest } from "../../services/logging/log_job";
 
 async function oldExtract(
   req: RequestWithAuth<{}, ExtractResponse, ExtractRequest>,
@@ -37,18 +42,33 @@ async function oldExtract(
   sender?.send(WebhookEvent.EXTRACT_STARTED, { success: true });
 
   try {
+    // Convert v1 scrapeOptions to v2 format
+    const scrapeOptions = req.body.scrapeOptions
+      ? fromV1ScrapeOptions(
+          req.body.scrapeOptions,
+          req.body.scrapeOptions.timeout,
+          req.auth.team_id,
+        ).scrapeOptions
+      : undefined;
+
+    // Create request with converted scrapeOptions (v2 format)
+    const request: V2ExtractRequest = {
+      ...req.body,
+      scrapeOptions,
+    } as V2ExtractRequest;
+
     let result: ExtractResult;
     const model = req.body.agent?.model;
     if (req.body.agent && model && model.toLowerCase().includes("fire-1")) {
       result = await performExtraction(extractId, {
-        request: req.body,
+        request,
         teamId: req.auth.team_id,
         subId: req.acuc?.sub_id ?? undefined,
         apiKeyId: req.acuc?.api_key_id ?? null,
       });
     } else {
       result = await performExtraction_F0(extractId, {
-        request: req.body,
+        request,
         teamId: req.auth.team_id,
         subId: req.acuc?.sub_id ?? undefined,
         apiKeyId: req.acuc?.api_key_id ?? null,
@@ -121,7 +141,7 @@ export async function extractController(
     }
   }
 
-  const extractId = crypto.randomUUID();
+  const extractId = uuidv7();
 
   _logger.info("Extract starting...", {
     request: req.body,
@@ -131,6 +151,17 @@ export async function extractController(
     subId: req.acuc?.sub_id,
     extractId,
     zeroDataRetention: req.acuc?.flags?.forceZDR,
+  });
+
+  await logRequest({
+    id: extractId,
+    kind: "extract",
+    api_version: "v1",
+    team_id: req.auth.team_id,
+    origin: req.body.origin ?? "api",
+    integration: req.body.integration,
+    target_hint: req.body.urls?.[0] ?? "",
+    zeroDataRetention: false, // not supported for extract
   });
 
   const scrapeOptions = req.body.scrapeOptions

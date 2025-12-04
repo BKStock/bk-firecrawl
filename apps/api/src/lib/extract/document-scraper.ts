@@ -1,3 +1,4 @@
+import { v7 as uuidv7 } from "uuid";
 import {
   Document,
   ScrapeOptions,
@@ -20,6 +21,7 @@ interface ScrapeDocumentOptions {
   isSingleUrl?: boolean;
   flags: TeamFlags | null;
   apiKeyId: number | null;
+  requestId?: string;
 }
 
 export async function scrapeDocument(
@@ -39,7 +41,7 @@ export async function scrapeDocument(
   }
 
   async function attemptScrape(timeout: number) {
-    const jobId = crypto.randomUUID();
+    const jobId = uuidv7();
     const jobPriority = await getJobPriority({
       team_id: options.teamId,
       basePriority: 10,
@@ -68,6 +70,7 @@ export async function scrapeDocument(
         startTime: Date.now(),
         zeroDataRetention: false, // not supported
         apiKeyId: options.apiKeyId,
+        requestId: options.requestId,
       },
       jobId,
       jobPriority,

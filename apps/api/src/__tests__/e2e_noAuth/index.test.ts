@@ -23,8 +23,6 @@ describe("E2E Tests for API Routes with No Authentication", () => {
     process.env.PLAYWRIGHT_MICROSERVICE_URL = "";
     process.env.LLAMAPARSE_API_KEY = "";
     process.env.TEST_API_KEY = "";
-    process.env.POSTHOG_API_KEY = "";
-    process.env.POSTHOG_HOST = "";
   });
 
   // restore original process.env
@@ -32,19 +30,11 @@ describe("E2E Tests for API Routes with No Authentication", () => {
     process.env = originalEnv;
   });
 
-  describe("GET /", () => {
-    it("should return Hello, world! message", async () => {
-      const response = await request(TEST_URL).get("/");
+  describe("GET /e2e-test", () => {
+    it.concurrent("should return OK message", async () => {
+      const response = await request(TEST_URL).get("/e2e-test");
       expect(response.statusCode).toBe(200);
-      expect(response.text).toContain("SCRAPERS-JS: Hello, world! Fly.io");
-    });
-  });
-
-  describe("GET /test", () => {
-    it("should return Hello, world! message", async () => {
-      const response = await request(TEST_URL).get("/test");
-      expect(response.statusCode).toBe(200);
-      expect(response.text).toContain("Hello, world!");
+      expect(response.text).toContain("OK");
     });
   });
 

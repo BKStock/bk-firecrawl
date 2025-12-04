@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { v4 as uuidv4 } from "uuid";
+import { v7 as uuidv7 } from "uuid";
 import {
   CrawlRequest,
   crawlRequestSchema,
@@ -18,6 +18,7 @@ import { logger as _logger } from "../../lib/logger";
 import { fromV1ScrapeOptions } from "../v2/types";
 import { checkPermissions } from "../../lib/permissions";
 import { crawlGroup } from "../../services/worker/nuq";
+import { logRequest } from "../../services/logging/log_job";
 
 export async function crawlController(
   req: RequestWithAuth<{}, CrawlResponse, CrawlRequest>,
@@ -37,7 +38,7 @@ export async function crawlController(
   const zeroDataRetention =
     req.acuc?.flags?.forceZDR || req.body.zeroDataRetention;
 
-  const id = uuidv4();
+  const id = uuidv7();
   const logger = _logger.child({
     crawlId: id,
     module: "api/v1",
@@ -52,6 +53,17 @@ export async function crawlController(
     account: req.account,
   });
 
+  await logRequest({
+    id,
+    kind: "crawl",
+    api_version: "v1",
+    team_id: req.auth.team_id,
+    origin: req.body.origin ?? "api",
+    integration: req.body.integration,
+    target_hint: req.body.url,
+    zeroDataRetention: zeroDataRetention || false,
+  });
+
   let { remainingCredits } = req.account!;
   const useDbAuthentication = process.env.USE_DB_AUTHENTICATION === "true";
   if (!useDbAuthentication) {
@@ -63,9 +75,12 @@ export async function crawlController(
     url: undefined,
     scrapeOptions: undefined,
   };
+
+  const bodyScrapeOptions =
+    req.body.scrapeOptions ?? ({} as typeof req.body.scrapeOptions);
   const { scrapeOptions, internalOptions } = fromV1ScrapeOptions(
-    req.body.scrapeOptions,
-    req.body.scrapeOptions.timeout,
+    bodyScrapeOptions,
+    bodyScrapeOptions.timeout,
     req.auth.team_id,
   );
 
@@ -162,7 +177,7 @@ export async function crawlController(
       zeroDataRetention: zeroDataRetention || false,
       apiKeyId: req.acuc?.api_key_id ?? null,
     },
-    crypto.randomUUID(),
+    uuidv7(),
   );
 
   const protocol = req.protocol;

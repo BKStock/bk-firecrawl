@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { shutdownOtel } from "./otel";
 import "./services/sentry";
+import { setSentryServiceTag } from "./services/sentry";
 import * as Sentry from "@sentry/node";
 import express, { NextFunction, Request, Response } from "express";
 import bodyParser from "body-parser";
@@ -26,7 +27,7 @@ import {
   ResponseWithSentry,
 } from "./controllers/v1/types";
 import { ZodError } from "zod";
-import { v4 as uuidv4 } from "uuid";
+import { v7 as uuidv7 } from "uuid";
 import { attachWsProxy } from "./services/agentLivecastWS";
 import { cacheableLookup } from "./scraper/scrapeURL/lib/cacheableLookup";
 import { v2Router } from "./routes/v2";
@@ -59,12 +60,16 @@ const app = ws.app;
 
 global.isProduction = process.env.IS_PRODUCTION === "true";
 
+setSentryServiceTag("api");
+
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json({ limit: "10mb" }));
 
 app.use(cors()); // Add this line to enable CORS
 
 app.use(responseTime());
+
+app.disable("x-powered-by");
 
 if (process.env.EXPRESS_TRUST_PROXY) {
   app.set("trust proxy", parseInt(process.env.EXPRESS_TRUST_PROXY, 10));
@@ -89,13 +94,12 @@ app.use(
   serverAdapter.getRouter(),
 );
 
-app.get("/", (req, res) => {
-  res.send("SCRAPERS-JS: Hello, world! K8s!");
+app.get("/", (_, res) => {
+  res.redirect("https://docs.firecrawl.dev/api-reference/v2-introduction");
 });
 
-//write a simple test function
-app.get("/test", async (req, res) => {
-  res.send("Hello, world!");
+app.get("/e2e-test", (_, res) => {
+  res.status(200).send("OK");
 });
 
 // register router
@@ -169,23 +173,34 @@ app.use(
     next: NextFunction,
   ) => {
     if (err instanceof ZodError) {
+      // In zod v4, ZodError uses 'issues' instead of 'errors'
+      const issues = err.issues;
+
       if (
-        Array.isArray(err.errors) &&
-        err.errors.find(x => x.message === "URL uses unsupported protocol")
+        Array.isArray(issues) &&
+        issues.find(x => x.message === "URL uses unsupported protocol")
       ) {
         logger.warn("Unsupported protocol error: " + JSON.stringify(req.body));
       }
 
-      const customErrorMessage =
-        err.errors.length > 0 && err.errors[0].code === "custom"
-          ? err.errors[0].message
+      // Check for unrecognized_keys errors and replace with custom message
+      const hasUnrecognizedKeys = issues.some(
+        e => e.code === "unrecognized_keys",
+      );
+      const strictMessage =
+        "Unrecognized key in body -- please review the v2 API documentation for request body changes";
+
+      const customErrorMessage = hasUnrecognizedKeys
+        ? strictMessage
+        : issues.length > 0 && issues[0].code === "custom"
+          ? issues[0].message
           : "Bad Request";
 
       res.status(400).json({
         success: false,
         code: "BAD_REQUEST",
         error: customErrorMessage,
-        details: err.errors,
+        details: issues,
       });
     } else {
       next(err);
@@ -215,7 +230,7 @@ app.use(
       });
     }
 
-    const id = res.sentry ?? uuidv4();
+    const id = res.sentry ?? uuidv7();
 
     logger.error(
       "Error occurred in request! (" + req.path + ") -- ID " + id + " -- ",

@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { v4 as uuidv4 } from "uuid";
+import { v7 as uuidv7 } from "uuid";
 import {
   BatchScrapeRequest,
   batchScrapeRequestSchema,
@@ -26,6 +26,7 @@ import { isUrlBlocked } from "../../scraper/WebScraper/utils/blocklist";
 import { fromV1ScrapeOptions } from "../v2/types";
 import { checkPermissions } from "../../lib/permissions";
 import { crawlGroup } from "../../services/worker/nuq";
+import { logRequest } from "../../services/logging/log_job";
 
 export async function batchScrapeController(
   req: RequestWithAuth<{}, BatchScrapeResponse, BatchScrapeRequest>,
@@ -49,7 +50,7 @@ export async function batchScrapeController(
   const zeroDataRetention =
     req.acuc?.flags?.forceZDR || req.body.zeroDataRetention;
 
-  const id = req.body.appendToId ?? uuidv4();
+  const id = req.body.appendToId ?? uuidv7();
   const logger = _logger.child({
     crawlId: id,
     batchScrapeId: id,
@@ -110,6 +111,19 @@ export async function batchScrapeController(
     account: req.account,
   });
 
+  if (!req.body.appendToId) {
+    await logRequest({
+      id,
+      kind: "batch_scrape",
+      api_version: "v1",
+      team_id: req.auth.team_id,
+      origin: req.body.origin ?? "api",
+      integration: req.body.integration,
+      target_hint: urls[0] ?? "",
+      zeroDataRetention: zeroDataRetention || false,
+    });
+  }
+
   const { scrapeOptions, internalOptions } = fromV1ScrapeOptions(
     req.body,
     req.body.timeout,
@@ -160,7 +174,7 @@ export async function batchScrapeController(
   logger.debug("Using job priority " + jobPriority, { jobPriority });
 
   const jobs = urls.map(x => ({
-    jobId: uuidv4(),
+    jobId: uuidv7(),
     data: {
       url: x,
       mode: "single_urls" as const,
