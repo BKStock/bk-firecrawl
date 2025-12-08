@@ -157,6 +157,19 @@ async function deriveImagesFromHTML(
 ): Promise<Document> {
   // Only derive if the formats has images
   if (hasFormatOfType(meta.options.formats, "images")) {
+    // Skip image extraction for PDFs - the images in parsed PDF markdown are
+    // relative paths that don't correspond to real URLs on the web
+    const isPdf =
+      document.metadata.contentType?.toLowerCase().includes("pdf") ||
+      document.metadata.url?.toLowerCase().endsWith(".pdf");
+
+    if (isPdf) {
+      meta.logger.debug("Skipping image extraction for PDF content", {
+        url: document.metadata.url,
+      });
+      return document;
+    }
+
     if (document.html === undefined) {
       throw new Error(
         "html is undefined -- this transformer is being called out of order",

@@ -433,7 +433,7 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
         numPages: effectivePageCount,
         title: pdfMetadata.title,
       },
-
+      contentType: "application/pdf",
       proxyUsed: "basic",
     };
   } finally {
