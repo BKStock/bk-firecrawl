@@ -13,7 +13,6 @@ function prepareAgentPayload(args: {
   strictConstrainToURLs?: boolean;
   scrapeOptions?: {
     maxAge?: number;
-    minAge?: number;
   };
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {};

@@ -735,7 +735,6 @@ export const agentRequestSchema = z.strictObject({
   scrapeOptions: z
     .object({
       maxAge: z.number().int().nonnegative().optional(),
-      minAge: z.number().int().nonnegative().optional(),
     })
     .optional(),
 
