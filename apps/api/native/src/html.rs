@@ -915,13 +915,42 @@ pub async fn extract_images(html: String, base_url: String) -> napi::Result<Vec<
 }
 
 /// Process multi-line links in markdown.
-#[napi]
-pub async fn post_process_markdown(markdown: String) -> napi::Result<String> {
-  let res = task::spawn_blocking(move || {
-    let mut link_open_count = 0usize;
-    let mut out = String::with_capacity(markdown.len());
+fn _post_process_markdown(markdown: &str) -> String {
+  let mut link_open_count = 0usize;
+  let mut out = String::with_capacity(markdown.len());
+  let mut in_fenced_code_block = false;
+  let mut at_line_start = true;
+  let mut backtick_count = 0usize;
+  let mut in_potential_fence = false;
 
-    for ch in markdown.chars() {
+  for ch in markdown.chars() {
+    // Track fenced code blocks (``` at start of line)
+    if ch == '`' && (at_line_start || in_potential_fence) {
+      backtick_count += 1;
+      in_potential_fence = true;
+    } else if ch == '\n' {
+      // End of line - check if we just finished a fence marker
+      if backtick_count >= 3 {
+        in_fenced_code_block = !in_fenced_code_block;
+      }
+      backtick_count = 0;
+      in_potential_fence = false;
+    } else if in_potential_fence {
+      // Non-backtick, non-newline character after backticks at line start
+      // This could be the language specifier (e.g., ```json)
+      // Check if we have enough backticks to toggle fence
+      if backtick_count >= 3 {
+        in_fenced_code_block = !in_fenced_code_block;
+      }
+      backtick_count = 0;
+      in_potential_fence = false;
+    }
+
+    // Track line starts (for detecting fence markers)
+    at_line_start = ch == '\n';
+
+    // Only track brackets and escape newlines when NOT inside a fenced code block
+    if !in_fenced_code_block {
       match ch {
         '[' => {
           link_open_count += 1;
@@ -939,17 +968,25 @@ pub async fn post_process_markdown(markdown: String) -> napi::Result<String> {
       } else {
         out.push(ch);
       }
+    } else {
+      // Inside fenced code block, just pass through without modification
+      out.push(ch);
     }
+  }
 
-    remove_skip_to_content_links(&out)
-  })
-  .await
-  .map_err(|e| {
-    napi::Error::new(
-      napi::Status::GenericFailure,
-      format!("post_process_markdown join error: {e}"),
-    )
-  })?;
+  remove_skip_to_content_links(&out)
+}
+
+#[napi]
+pub async fn post_process_markdown(markdown: String) -> napi::Result<String> {
+  let res = task::spawn_blocking(move || _post_process_markdown(&markdown))
+    .await
+    .map_err(|e| {
+      napi::Error::new(
+        napi::Status::GenericFailure,
+        format!("post_process_markdown join error: {e}"),
+      )
+    })?;
 
   Ok(res)
 }
@@ -995,4 +1032,149 @@ fn remove_skip_to_content_links(input: &str) -> String {
   }
 
   out
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_post_process_markdown_json_in_fenced_code_block() {
+    // JSON arrays inside fenced code blocks should NOT have backslashes added
+    let input = r#"Some text
+
+```json
+{
+  "addresses": [
+    {
+      "city": "San Francisco"
+    }
+  ]
+}
+```
+
+More text"#;
+
+    let result = _post_process_markdown(input);
+
+    // The JSON should be unchanged - no backslashes before newlines
+    assert!(
+      !result.contains("[\\\n"),
+      "JSON arrays in code blocks should not have backslashes"
+    );
+    assert!(
+      !result.contains("}\\\n"),
+      "JSON objects in code blocks should not have backslashes"
+    );
+    assert!(result.contains("\"addresses\": ["));
+    assert!(result.contains("\"city\": \"San Francisco\""));
+  }
+
+  #[test]
+  fn test_post_process_markdown_multiline_link_still_works() {
+    // Multi-line link labels outside code blocks should still get backslashes
+    let input = "[link text\nwith newline](http://example.com)";
+
+    let result = _post_process_markdown(input);
+
+    // The newline inside the link label should be escaped
+    assert!(
+      result.contains("\\\n"),
+      "Multi-line link labels should have escaped newlines"
+    );
+  }
+
+  #[test]
+  fn test_post_process_markdown_brackets_outside_code_block() {
+    // Brackets outside code blocks should still be tracked
+    let input = "Text with [bracket\ncontent] here";
+
+    let result = _post_process_markdown(input);
+
+    // The newline inside brackets should be escaped
+    assert!(
+      result.contains("\\\n"),
+      "Newlines inside brackets outside code blocks should be escaped"
+    );
+  }
+
+  #[test]
+  fn test_post_process_markdown_multiple_code_blocks() {
+    // Multiple code blocks should be handled correctly
+    let input = r#"Before
+
+```json
+["item1", "item2"]
+```
+
+Between [link
+text](url)
+
+```python
+data = ["a", "b"]
+```
+
+After"#;
+
+    let result = _post_process_markdown(input);
+
+    // JSON array in first code block should not have backslashes
+    assert!(result.contains("[\"item1\", \"item2\"]"));
+    // Python list in second code block should not have backslashes
+    assert!(result.contains("[\"a\", \"b\"]"));
+    // Link text should have escaped newline
+    assert!(result.contains("[link\\\ntext](url)"));
+  }
+
+  #[test]
+  fn test_post_process_markdown_nested_json_arrays() {
+    // Nested JSON arrays should not have backslashes
+    let input = r#"```json
+{
+  "data": [
+    {
+      "nested": [
+        {"key": "value"}
+      ]
+    }
+  ]
+}
+```"#;
+
+    let result = _post_process_markdown(input);
+
+    // No backslashes should be added inside the code block
+    assert!(
+      !result.contains("\\\n"),
+      "No backslashes should be added inside fenced code blocks"
+    );
+  }
+
+  #[test]
+  fn test_post_process_markdown_code_block_with_language() {
+    // Code blocks with language specifiers should work
+    let input = "```javascript\nconst arr = [\n  1,\n  2\n];\n```";
+
+    let result = _post_process_markdown(input);
+
+    // No backslashes should be added
+    assert!(
+      !result.contains("\\\n"),
+      "Code blocks with language should not have backslashes"
+    );
+  }
+
+  #[test]
+  fn test_post_process_markdown_skip_to_content_removed() {
+    // Skip to Content links should still be removed
+    let input = "[Skip to Content](#main) Some content";
+
+    let result = _post_process_markdown(input);
+
+    assert!(
+      !result.contains("Skip to Content"),
+      "Skip to Content links should be removed"
+    );
+    assert!(result.contains("Some content"));
+  }
 }
