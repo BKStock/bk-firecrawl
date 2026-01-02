@@ -1,6 +1,7 @@
 import { ScrapeOptions } from "../../../controllers/v2/types";
 import { htmlTransform } from "./removeUnwantedElements";
 import { parseMarkdown } from "../../../lib/html-to-markdown";
+import { Logger } from "winston";
 
 /**
  * Transforms HTML and converts to markdown for quality checking.
@@ -19,6 +20,10 @@ export async function transformAndValidateContent(
   html: string,
   url: string,
   options: ScrapeOptions,
+  context: {
+    logger?: Logger;
+    requestId?: string;
+  },
 ): Promise<{
   transformedHtml: string;
   markdown: string;
@@ -31,7 +36,7 @@ export async function transformAndValidateContent(
     ...options,
     onlyMainContent: useOnlyMainContent,
   });
-  let markdown = await parseMarkdown(transformedHtml);
+  let markdown = await parseMarkdown(transformedHtml, context);
   let usedOnlyMainContent = useOnlyMainContent;
 
   // Fallback to full content if main content extraction resulted in empty markdown
@@ -40,7 +45,7 @@ export async function transformAndValidateContent(
       ...options,
       onlyMainContent: false,
     });
-    markdown = await parseMarkdown(transformedHtml);
+    markdown = await parseMarkdown(transformedHtml, context);
     usedOnlyMainContent = false;
   }
 

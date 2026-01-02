@@ -946,6 +946,7 @@ const mapRequestSchemaBase = crawlerOptions
     filterByPath: z.boolean().prefault(true),
     useIndex: z.boolean().prefault(true),
     location: locationSchema,
+    headers: z.record(z.string(), z.string()).optional(),
   });
 
 export const mapRequestSchema = mapRequestSchemaBase.strict();
@@ -1256,6 +1257,7 @@ export type TeamFlags = {
   skipCountryCheck?: boolean;
   extractV3Beta?: boolean;
   agentBeta?: boolean;
+  bypassCreditChecks?: boolean;
 } | null;
 
 export type AuthCreditUsageChunkFromTeam = Omit<
@@ -1526,6 +1528,7 @@ export type SearchResponse =
       success: true;
       warning?: string;
       data: Document[];
+      id: string;
     };
 
 export type TokenUsage = {

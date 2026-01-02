@@ -760,16 +760,19 @@ class FirecrawlClient:
         urls: Optional[List[str]] = None,
         *,
         prompt: str,
-        schema: Optional[Dict[str, Any]] = None,
+        schema: Optional[Any] = None,
         integration: Optional[str] = None,
+        max_credits: Optional[int] = None,
+        strict_constrain_to_urls: Optional[bool] = None,
     ):
         """Start an agent job (non-blocking).
 
         Args:
             urls: URLs to process (optional)
             prompt: Natural-language instruction for the agent
-            schema: Target JSON schema for the output
+            schema: Target JSON schema for the output (dict or Pydantic BaseModel)
             integration: Integration tag/name
+            max_credits: Maximum credits to use (optional)
         Returns:
             Response payload with job id/status (poll with get_agent_status)
         """
@@ -779,6 +782,8 @@ class FirecrawlClient:
             prompt=prompt,
             schema=schema,
             integration=integration,
+            max_credits=max_credits,
+            strict_constrain_to_urls=strict_constrain_to_urls,
         )
 
     def agent(
@@ -786,20 +791,23 @@ class FirecrawlClient:
         urls: Optional[List[str]] = None,
         *,
         prompt: str,
-        schema: Optional[Dict[str, Any]] = None,
+        schema: Optional[Any] = None,
         integration: Optional[str] = None,
         poll_interval: int = 2,
         timeout: Optional[int] = None,
+        max_credits: Optional[int] = None,
+        strict_constrain_to_urls: Optional[bool] = None,
     ):
         """Run an agent and wait until completion.
 
         Args:
             urls: URLs to process (optional)
             prompt: Natural-language instruction for the agent
-            schema: Target JSON schema for the output
+            schema: Target JSON schema for the output (dict or Pydantic BaseModel)
             integration: Integration tag/name
             poll_interval: Seconds between status checks
             timeout: Maximum seconds to wait (None for no timeout)
+            max_credits: Maximum credits to use (optional)
         Returns:
             Final agent response when completed
         """
@@ -811,6 +819,8 @@ class FirecrawlClient:
             integration=integration,
             poll_interval=poll_interval,
             timeout=timeout,
+            max_credits=max_credits,
+            strict_constrain_to_urls=strict_constrain_to_urls,
         )
 
     def get_agent_status(self, job_id: str):

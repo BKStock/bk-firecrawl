@@ -46,37 +46,29 @@ export async function agentController(
   });
 
   if (!config.EXTRACT_V3_BETA_URL) {
-    return res.status(400).json({
-      success: false,
-      error: "Agent beta is not enabled.",
-    });
+    throw new Error("Agent beta is not enabled.");
   }
 
-  if (
-    !req.acuc?.flags?.extractV3Beta &&
-    !req.acuc?.flags?.agentBeta &&
-    !(
-      config.AGENT_INTEROP_SECRET &&
-      req.body.overrideWhitelist === config.AGENT_INTEROP_SECRET
-    )
-  ) {
-    return res.status(400).json({
-      success: false,
-      error:
-        "Agent beta is not enabled for your team. Please contact support@firecrawl.com to join the beta.",
-    });
+  let freeRequest: any;
+
+  if (config.USE_DB_AUTHENTICATION) {
+    const { data, error: freeRequestError } = await supabase_service.rpc(
+      "agent_consume_free_request_if_left",
+      {
+        i_team_id: req.auth.team_id,
+      },
+    );
+
+    if (freeRequestError) {
+      throw freeRequestError;
+    }
+
+    freeRequest = data;
   }
 
-  const { data: freeRequest, error: freeRequestError } =
-    await supabase_service.rpc("agent_consume_free_request_if_left", {
-      i_team_id: req.auth.team_id,
-    });
-
-  if (freeRequestError) {
-    throw freeRequestError;
-  }
-
-  const isFreeRequest = !!freeRequest?.[0]?.consumed;
+  const isFreeRequest = config.USE_DB_AUTHENTICATION
+    ? !!freeRequest?.[0]?.consumed
+    : true;
 
   await logRequest({
     id: agentId,
@@ -107,6 +99,8 @@ export async function agentController(
         apiKeyId: req.acuc!.api_key_id ?? undefined,
         teamId: req.auth.team_id,
         isFreeRequest,
+        maxCredits: req.body.maxCredits ?? undefined,
+        strictConstrainToURLs: req.body.strictConstrainToURLs ?? undefined,
       }),
     },
   );

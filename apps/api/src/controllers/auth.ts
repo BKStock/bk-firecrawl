@@ -14,6 +14,7 @@ import { logger } from "../lib/logger";
 import { redlock } from "../services/redlock";
 import { deleteKey, getValue } from "../services/redis";
 import { setValue } from "../services/redis";
+import { getRedisConnection } from "../services/queue-service";
 import { validate } from "uuid";
 import * as Sentry from "@sentry/node";
 import { AuthCreditUsageChunk, AuthCreditUsageChunkFromTeam } from "./v1/types";
@@ -384,6 +385,9 @@ export async function clearACUCTeam(team_id: string): Promise<void> {
 
   // Also clear the base cache key
   await deleteKey(`acuc_team_${team_id}`);
+
+  // Add team to billed_teams set so tally gets updated too
+  await getRedisConnection().sadd("billed_teams", team_id);
 }
 
 export async function authenticateUser(

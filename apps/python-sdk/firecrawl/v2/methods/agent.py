@@ -4,23 +4,37 @@ import time
 from ..types import AgentResponse
 from ..utils.http_client import HttpClient
 from ..utils.error_handler import handle_response_error
+from ..utils.validation import _normalize_schema
 
 
 def _prepare_agent_request(
     urls: Optional[List[str]],
     *,
     prompt: str,
-    schema: Optional[Dict[str, Any]] = None,
+    schema: Optional[Any] = None,
     integration: Optional[str] = None,
+    max_credits: Optional[int] = None,
+    strict_constrain_to_urls: Optional[bool] = None,
 ) -> Dict[str, Any]:
     body: Dict[str, Any] = {}
     if urls is not None:
         body["urls"] = urls
     body["prompt"] = prompt
     if schema is not None:
-        body["schema"] = schema
+        normalized_schema = _normalize_schema(schema)
+        if normalized_schema is not None:
+            body["schema"] = normalized_schema
+        else:
+            raise ValueError(
+                f"Invalid schema type: {type(schema).__name__}. "
+                "Schema must be a dict, Pydantic BaseModel class, or Pydantic model instance."
+            )
     if integration is not None and str(integration).strip():
         body["integration"] = str(integration).strip()
+    if max_credits is not None and max_credits > 0:
+        body["maxCredits"] = max_credits
+    if strict_constrain_to_urls is not None and strict_constrain_to_urls:
+        body["strictConstrainToURLs"] = strict_constrain_to_urls
     return body
 
 
@@ -38,14 +52,18 @@ def start_agent(
     urls: Optional[List[str]],
     *,
     prompt: str,
-    schema: Optional[Dict[str, Any]] = None,
+    schema: Optional[Any] = None,
     integration: Optional[str] = None,
+    max_credits: Optional[int] = None,
+    strict_constrain_to_urls: Optional[bool] = None,
 ) -> AgentResponse:
     body = _prepare_agent_request(
         urls,
         prompt=prompt,
         schema=schema,
         integration=integration,
+        max_credits=max_credits,
+        strict_constrain_to_urls=strict_constrain_to_urls,
     )
     resp = client.post("/v2/agent", body)
     if not resp.ok:
@@ -84,10 +102,12 @@ def agent(
     urls: Optional[List[str]],
     *,
     prompt: str,
-    schema: Optional[Dict[str, Any]] = None,
+    schema: Optional[Any] = None,
     integration: Optional[str] = None,
     poll_interval: int = 2,
     timeout: Optional[int] = None,
+    max_credits: Optional[int] = None,
+    strict_constrain_to_urls: Optional[bool] = None,
 ) -> AgentResponse:
     started = start_agent(
         client,
@@ -95,6 +115,8 @@ def agent(
         prompt=prompt,
         schema=schema,
         integration=integration,
+        max_credits=max_credits,
+        strict_constrain_to_urls=strict_constrain_to_urls,
     )
     job_id = getattr(started, "id", None)
     if not job_id:
