@@ -64,6 +64,7 @@ const configSchema = z.object({
   NUQ_DATABASE_URL: z.string().optional(),
   NUQ_DATABASE_URL_LISTEN: z.string().optional(),
   NUQ_RABBITMQ_URL: z.string().optional(),
+  INDEXER_RABBITMQ_URL: z.string().optional(),
 
   // Supabase
   SUPABASE_URL: z.string().optional(),

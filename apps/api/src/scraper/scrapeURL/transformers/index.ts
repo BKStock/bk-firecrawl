@@ -17,6 +17,7 @@ import { sendDocumentToIndex } from "../engines/index/index";
 import { sendDocumentToSearchIndex } from "./sendToSearchIndex";
 import { hasFormatOfType } from "../../../lib/format-utils";
 import { brandingTransformer } from "../../../lib/branding/transformer";
+import { indexerQueue } from "../../../services/indexing/indexer-queue";
 
 type Transformer = (
   meta: Meta,
@@ -148,14 +149,16 @@ async function deriveLinksFromHTML(
   meta: Meta,
   document: Document,
 ): Promise<Document> {
-  // Only derive if the formats has links
-  if (hasFormatOfType(meta.options.formats, "links")) {
-    if (document.html === undefined) {
-      throw new Error(
-        "html is undefined -- this transformer is being called out of order",
-      );
-    }
+  if (document.html === undefined) {
+    throw new Error(
+      "html is undefined -- this transformer is being called out of order",
+    );
+  }
 
+  if (
+    !meta.internalOptions.teamId?.includes("robots-txt") &&
+    !meta.internalOptions.teamId?.includes("sitemap")
+  ) {
     document.links = await extractLinks(
       document.html,
       document.metadata.url ??
@@ -163,6 +166,33 @@ async function deriveLinksFromHTML(
         meta.rewrittenUrl ??
         meta.url,
     );
+
+    let linksDeduped: Set<string> = new Set();
+    if (!!document.links) {
+      linksDeduped = new Set([...document.links]);
+    }
+
+    indexerQueue
+      .sendToWorker({
+        id: meta.id,
+        type: "links",
+        discovery_url:
+          document.metadata.url ??
+          document.metadata.sourceURL ??
+          meta.rewrittenUrl ??
+          meta.url,
+        urls: [...linksDeduped],
+      })
+      .catch(error => {
+        meta.logger.error("Failed to queue links for indexing", {
+          error: (error as Error)?.message,
+          url: meta.url,
+        });
+      });
+  }
+
+  if (!hasFormatOfType(meta.options.formats, "links")) {
+    delete document.links;
   }
 
   return document;
