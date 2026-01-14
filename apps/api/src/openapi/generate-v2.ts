@@ -176,7 +176,7 @@ async function main() {
       "/scrape": {
         post: {
           tags: ["Scraping"],
-          operationId: "v2Scrape",
+          operationId: "Scrape",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -197,7 +197,7 @@ async function main() {
       "/scrape/{jobId}": {
         get: {
           tags: ["Scraping"],
-          operationId: "v2ScrapeStatus",
+          operationId: "Scrape Status",
           security: [{ bearerAuth: [] }],
           parameters: zodObjectToParameters(jobIdParamsSchema, "path"),
           responses: {
@@ -213,7 +213,7 @@ async function main() {
       "/batch/scrape": {
         post: {
           tags: ["Scraping"],
-          operationId: "v2BatchScrape",
+          operationId: "Batch Scrape",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -236,7 +236,7 @@ async function main() {
       "/batch/scrape/{jobId}": {
         get: {
           tags: ["Scraping"],
-          operationId: "v2BatchScrapeStatus",
+          operationId: "Batch Scrape Status",
           security: [{ bearerAuth: [] }],
           parameters: zodObjectToParameters(jobIdParamsSchema, "path"),
           responses: {
@@ -252,7 +252,7 @@ async function main() {
         },
         delete: {
           tags: ["Scraping"],
-          operationId: "v2BatchScrapeCancel",
+          operationId: "Batch Scrape Cancel",
           security: [{ bearerAuth: [] }],
           parameters: zodObjectToParameters(jobIdParamsSchema, "path"),
           responses: {
@@ -270,7 +270,7 @@ async function main() {
       "/batch/scrape/{jobId}/errors": {
         get: {
           tags: ["Scraping"],
-          operationId: "v2BatchScrapeErrors",
+          operationId: "Batch Scrape Errors",
           security: [{ bearerAuth: [] }],
           parameters: zodObjectToParameters(jobIdParamsSchema, "path"),
           responses: {
@@ -288,7 +288,7 @@ async function main() {
       "/search": {
         post: {
           tags: ["Search"],
-          operationId: "v2Search",
+          operationId: "Search",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -309,7 +309,7 @@ async function main() {
       "/map": {
         post: {
           tags: ["Mapping"],
-          operationId: "v2Map",
+          operationId: "Map",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -330,7 +330,7 @@ async function main() {
       "/crawl": {
         post: {
           tags: ["Crawling"],
-          operationId: "v2Crawl",
+          operationId: "Crawl",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -351,7 +351,7 @@ async function main() {
       "/crawl/{jobId}": {
         get: {
           tags: ["Crawling"],
-          operationId: "v2CrawlStatus",
+          operationId: "Crawl Status",
           security: [{ bearerAuth: [] }],
           parameters: zodObjectToParameters(jobIdParamsSchema, "path"),
           responses: {
@@ -367,7 +367,7 @@ async function main() {
         },
         delete: {
           tags: ["Crawling"],
-          operationId: "v2CrawlCancel",
+          operationId: "Crawl Cancel",
           security: [{ bearerAuth: [] }],
           parameters: zodObjectToParameters(jobIdParamsSchema, "path"),
           responses: {
@@ -385,7 +385,7 @@ async function main() {
       "/crawl/{jobId}/errors": {
         get: {
           tags: ["Crawling"],
-          operationId: "v2CrawlErrors",
+          operationId: "Crawl Errors",
           security: [{ bearerAuth: [] }],
           parameters: zodObjectToParameters(jobIdParamsSchema, "path"),
           responses: {
@@ -403,7 +403,7 @@ async function main() {
       "/crawl/ongoing": {
         get: {
           tags: ["Crawling"],
-          operationId: "v2CrawlOngoing",
+          operationId: "Crawl Ongoing",
           security: [{ bearerAuth: [] }],
           responses: {
             "200": {
@@ -420,7 +420,7 @@ async function main() {
       "/crawl/active": {
         get: {
           tags: ["Crawling"],
-          operationId: "v2CrawlActive",
+          operationId: "Crawl Active",
           security: [{ bearerAuth: [] }],
           responses: {
             "200": {
@@ -437,7 +437,7 @@ async function main() {
       "/extract": {
         post: {
           tags: ["Extract"],
-          operationId: "v2Extract",
+          operationId: "Extract",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -458,7 +458,7 @@ async function main() {
       "/agent": {
         post: {
           tags: ["Agent"],
-          operationId: "v2Agent",
+          operationId: "Agent",
           security: [{ bearerAuth: [] }],
           requestBody: {
             required: true,
@@ -479,7 +479,7 @@ async function main() {
       "/agent/{jobId}": {
         get: {
           tags: ["Agent"],
-          operationId: "v2AgentStatus",
+          operationId: "Agent Status",
           security: [{ bearerAuth: [] }],
           parameters: zodObjectToParameters(jobIdParamsSchema, "path"),
           responses: {
@@ -495,7 +495,7 @@ async function main() {
         },
         delete: {
           tags: ["Agent"],
-          operationId: "v2AgentCancel",
+          operationId: "Agent Cancel",
           security: [{ bearerAuth: [] }],
           parameters: zodObjectToParameters(jobIdParamsSchema, "path"),
           responses: {
