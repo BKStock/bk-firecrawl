@@ -51,6 +51,53 @@ function zodToJsonSchema(
   return rest;
 }
 
+// Remove internal __ prefixed properties from JSON schema (recursive)
+function stripInternalProps(schema: any): any {
+  if (!schema || typeof schema !== "object") return schema;
+  if (Array.isArray(schema)) return schema.map(stripInternalProps);
+
+  const result: any = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === "properties" && typeof value === "object" && value !== null) {
+      // Filter out __ prefixed properties
+      const filtered: any = {};
+      for (const [propName, propValue] of Object.entries(value)) {
+        if (!propName.startsWith("__")) {
+          filtered[propName] = stripInternalProps(propValue);
+        }
+      }
+      result[key] = filtered;
+    } else if (key === "$defs" && typeof value === "object" && value !== null) {
+      // Process $defs recursively to strip __ props from nested schemas
+      const filtered: any = {};
+      for (const [defName, defValue] of Object.entries(value)) {
+        filtered[defName] = stripInternalProps(defValue);
+      }
+      result[key] = filtered;
+    } else if (
+      key === "default" &&
+      typeof value === "object" &&
+      value !== null &&
+      !Array.isArray(value)
+    ) {
+      // Strip __ prefixed keys from default values
+      const filtered: any = {};
+      for (const [propName, propValue] of Object.entries(value)) {
+        if (!propName.startsWith("__")) {
+          filtered[propName] = propValue;
+        }
+      }
+      result[key] = filtered;
+    } else if (key === "required" && Array.isArray(value)) {
+      // Filter out __ prefixed required fields
+      result[key] = value.filter((name: string) => !name.startsWith("__"));
+    } else {
+      result[key] = stripInternalProps(value);
+    }
+  }
+  return result;
+}
+
 function zodObjectToParameters(
   objSchema: z.ZodTypeAny,
   location: "path" | "query",
@@ -238,14 +285,26 @@ async function main() {
   ]);
 
   const schemas: Record<string, any> = {
-    // Requests
-    ScrapeRequest: zodToJsonSchema(scrapeRequestSchema, "input"),
-    BatchScrapeRequest: zodToJsonSchema(batchScrapeRequestSchema, "input"),
-    CrawlRequest: zodToJsonSchema(crawlRequestSchema, "input"),
-    MapRequest: zodToJsonSchema(mapRequestSchema, "input"),
-    SearchRequest: zodToJsonSchema(searchRequestSchema, "input"),
-    ExtractRequest: zodToJsonSchema(extractRequestSchema, "input"),
-    AgentRequest: zodToJsonSchema(agentRequestSchema, "input"),
+    // Requests (strip internal __ prefixed properties)
+    ScrapeRequest: stripInternalProps(
+      zodToJsonSchema(scrapeRequestSchema, "input"),
+    ),
+    BatchScrapeRequest: stripInternalProps(
+      zodToJsonSchema(batchScrapeRequestSchema, "input"),
+    ),
+    CrawlRequest: stripInternalProps(
+      zodToJsonSchema(crawlRequestSchema, "input"),
+    ),
+    MapRequest: stripInternalProps(zodToJsonSchema(mapRequestSchema, "input")),
+    SearchRequest: stripInternalProps(
+      zodToJsonSchema(searchRequestSchema, "input"),
+    ),
+    ExtractRequest: stripInternalProps(
+      zodToJsonSchema(extractRequestSchema, "input"),
+    ),
+    AgentRequest: stripInternalProps(
+      zodToJsonSchema(agentRequestSchema, "input"),
+    ),
 
     // Common / lightweight responses (best-effort)
     ErrorResponse: zodToJsonSchema(ErrorResponseSchema, "output"),

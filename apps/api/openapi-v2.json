@@ -517,18 +517,6 @@
             "default": true,
             "type": "boolean"
           },
-          "__searchPreviewToken": {
-            "type": "string"
-          },
-          "__experimental_omce": {
-            "type": "boolean"
-          },
-          "__experimental_omceDomain": {
-            "type": "string"
-          },
-          "__experimental_engpicker": {
-            "type": "boolean"
-          },
           "url": {
             "type": "string",
             "pattern": "^https?:\\/\\/"
@@ -542,21 +530,6 @@
           },
           "zeroDataRetention": {
             "type": "boolean"
-          },
-          "__agentInterop": {
-            "type": "object",
-            "properties": {
-              "auth": {
-                "type": "string"
-              },
-              "requestId": {
-                "type": "string"
-              },
-              "shouldBill": {
-                "type": "boolean"
-              }
-            },
-            "required": ["auth", "requestId", "shouldBill"]
           }
         },
         "required": ["formats", "url"],
@@ -1059,18 +1032,6 @@
             "default": true,
             "type": "boolean"
           },
-          "__searchPreviewToken": {
-            "type": "string"
-          },
-          "__experimental_omce": {
-            "type": "boolean"
-          },
-          "__experimental_omceDomain": {
-            "type": "string"
-          },
-          "__experimental_engpicker": {
-            "type": "boolean"
-          },
           "urls": {
             "minItems": 1,
             "type": "array",
@@ -1141,21 +1102,6 @@
           },
           "zeroDataRetention": {
             "type": "boolean"
-          },
-          "__agentInterop": {
-            "type": "object",
-            "properties": {
-              "auth": {
-                "type": "string"
-              },
-              "requestId": {
-                "type": "string"
-              },
-              "shouldBill": {
-                "type": "boolean"
-              }
-            },
-            "required": ["auth", "requestId", "shouldBill"]
           }
         },
         "required": ["formats", "urls"],
@@ -1242,9 +1188,7 @@
               "fastMode": false,
               "blockAds": true,
               "proxy": "auto",
-              "storeInCache": true,
-              "__experimental_omce": false,
-              "__experimental_engpicker": false
+              "storeInCache": true
             },
             "type": "object",
             "properties": {
@@ -1741,18 +1685,6 @@
               "storeInCache": {
                 "default": true,
                 "type": "boolean"
-              },
-              "__searchPreviewToken": {
-                "type": "string"
-              },
-              "__experimental_omce": {
-                "type": "boolean"
-              },
-              "__experimental_omceDomain": {
-                "type": "string"
-              },
-              "__experimental_engpicker": {
-                "type": "boolean"
               }
             },
             "required": ["formats"],
@@ -2093,9 +2025,6 @@
           },
           "asyncScraping": {
             "type": "boolean"
-          },
-          "__searchPreviewToken": {
-            "type": "string"
           },
           "scrapeOptions": {
             "type": "object",
@@ -2515,37 +2444,10 @@
               "storeInCache": {
                 "default": true,
                 "type": "boolean"
-              },
-              "__searchPreviewToken": {
-                "type": "string"
-              },
-              "__experimental_omce": {
-                "type": "boolean"
-              },
-              "__experimental_omceDomain": {
-                "type": "string"
-              },
-              "__experimental_engpicker": {
-                "type": "boolean"
               }
             },
             "required": ["formats"],
             "additionalProperties": false
-          },
-          "__agentInterop": {
-            "type": "object",
-            "properties": {
-              "auth": {
-                "type": "string"
-              },
-              "requestId": {
-                "type": "string"
-              },
-              "shouldBill": {
-                "type": "boolean"
-              }
-            },
-            "required": ["auth", "requestId", "shouldBill"]
           }
         },
         "required": ["query"],
@@ -3085,18 +2987,6 @@
               "storeInCache": {
                 "default": true,
                 "type": "boolean"
-              },
-              "__searchPreviewToken": {
-                "type": "string"
-              },
-              "__experimental_omce": {
-                "type": "boolean"
-              },
-              "__experimental_omceDomain": {
-                "type": "string"
-              },
-              "__experimental_engpicker": {
-                "type": "boolean"
               }
             },
             "required": ["formats"],
@@ -3127,27 +3017,7 @@
             },
             "additionalProperties": false
           },
-          "__experimental_streamSteps": {
-            "type": "boolean"
-          },
-          "__experimental_llmUsage": {
-            "type": "boolean"
-          },
-          "__experimental_showSources": {
-            "type": "boolean"
-          },
           "showSources": {
-            "type": "boolean"
-          },
-          "__experimental_cacheKey": {
-            "type": "string"
-          },
-          "__experimental_cacheMode": {
-            "default": "direct",
-            "type": "string",
-            "enum": ["direct", "save", "load"]
-          },
-          "__experimental_showCostTracking": {
             "type": "boolean"
           },
           "ignoreInvalidURLs": {
