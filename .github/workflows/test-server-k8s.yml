@@ -17,7 +17,7 @@ permissions:
 jobs:
   build-images:
     name: build images (cached)
-    runs-on: ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
