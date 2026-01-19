@@ -20,6 +20,7 @@ import { ScrapeJobData } from "../../types";
 import { teamConcurrencySemaphore } from "../../services/worker/team-semaphore";
 import { getJobPriority } from "../../lib/job-priority";
 import { logRequest } from "../../services/logging/log_job";
+import { getErrorContactMessage } from "../../lib/deployment";
 
 export async function scrapeController(
   req: RequestWithAuth<{}, ScrapeResponse, ScrapeRequest>,
@@ -305,12 +306,22 @@ export async function scrapeController(
             error: e.message,
           });
         } else {
+          const id = uuidv7();
+          logger.error(`Error in scrapeController`, {
+            version: "v2",
+            error: e,
+            errorId: id,
+            path: req.path,
+            teamId: req.auth.team_id,
+          });
           setSpanAttributes(span, {
             "scrape.status_code": 500,
+            "scrape.error_id": id,
           });
           return res.status(500).json({
             success: false,
-            error: `(Internal server error) - ${e && e.message ? e.message : e}`,
+            code: "UNKNOWN_ERROR",
+            error: getErrorContactMessage(id),
           });
         }
       } finally {
