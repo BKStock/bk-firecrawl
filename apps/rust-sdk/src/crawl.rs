@@ -142,6 +142,14 @@ pub enum WebhookEvent {
     Started,
 }
 
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub enum SitemapMode {
+    Include,
+    Skip,
+    Only,
+}
+
 #[serde_with::skip_serializing_none]
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -164,6 +172,10 @@ pub struct CrawlOptions {
 
     /// Tells the crawler to ignore the sitemap when crawling. (default: `true`)
     pub ignore_sitemap: Option<bool>,
+
+    /// Sitemap usage mode for crawls. Note: `only` requires the v2 API.
+    #[serde(skip_serializing)]
+    pub sitemap: Option<SitemapMode>,
 
     /// Maximum number of pages to crawl. (default: `10`)
     pub limit: Option<u32>,
@@ -293,9 +305,23 @@ impl FirecrawlApp {
         url: impl AsRef<str>,
         options: Option<CrawlOptions>,
     ) -> Result<CrawlAsyncResponse, FirecrawlError> {
+        let mut options = options.unwrap_or_default();
+        if let Some(mode) = options.sitemap {
+            match mode {
+                SitemapMode::Skip => options.ignore_sitemap = Some(true),
+                SitemapMode::Include => options.ignore_sitemap = Some(false),
+                SitemapMode::Only => {
+                    return Err(FirecrawlError::Missuse(
+                        "sitemap=only requires the v2 API, but the Rust SDK targets v1"
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+
         let body = CrawlRequestBody {
             url: url.as_ref().to_string(),
-            options: options.unwrap_or_default(),
+            options,
         };
 
         let headers = self.prepare_headers(body.options.idempotency_key.as_ref());
