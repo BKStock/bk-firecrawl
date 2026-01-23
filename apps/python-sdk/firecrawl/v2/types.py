@@ -588,6 +588,9 @@ class CrawlRequest(BaseModel):
     crawl_entire_domain: bool = False
     allow_external_links: bool = False
     allow_subdomains: bool = False
+    ignore_robots_txt: bool = False
+    deduplicate_similar_urls: bool = True
+    regex_on_full_url: bool = False
     delay: Optional[int] = None
     max_concurrency: Optional[int] = None
     webhook: Optional[Union[str, WebhookConfig]] = None
@@ -757,6 +760,21 @@ class MapOptions(BaseModel):
     timeout: Optional[int] = None
     integration: Optional[str] = None
     location: Optional["Location"] = None
+    use_mock: Optional[str] = None
+    filter_by_path: Optional[bool] = None
+    use_index: Optional[bool] = None
+    ignore_cache: Optional[bool] = None
+    headers: Optional[Dict[str, str]] = None
+    include_paths: Optional[List[str]] = None
+    exclude_paths: Optional[List[str]] = None
+    max_discovery_depth: Optional[int] = None
+    crawl_entire_domain: Optional[bool] = None
+    allow_external_links: Optional[bool] = None
+    allow_subdomains: Optional[bool] = None
+    ignore_robots_txt: Optional[bool] = None
+    deduplicate_similar_urls: Optional[bool] = None
+    regex_on_full_url: Optional[bool] = None
+    delay: Optional[int] = None
 
 
 class MapRequest(BaseModel):
@@ -788,11 +806,17 @@ class ExtractRequest(BaseModel):
     prompt: Optional[str] = None
     schema_: Optional[Dict[str, Any]] = Field(default=None, alias="schema")
     system_prompt: Optional[str] = None
+    limit: Optional[int] = None
+    ignore_sitemap: Optional[bool] = None
+    include_subdomains: Optional[bool] = None
     allow_external_links: Optional[bool] = None
     enable_web_search: Optional[bool] = None
     show_sources: Optional[bool] = None
+    url_trace: Optional[bool] = None
+    timeout: Optional[int] = None
     scrape_options: Optional[ScrapeOptions] = None
     ignore_invalid_urls: Optional[bool] = None
+    webhook: Optional[Union[str, WebhookConfig]] = None
     integration: Optional[str] = None
     agent: Optional[AgentOptions] = None
 
@@ -1000,8 +1024,13 @@ class SearchRequest(BaseModel):
     categories: Optional[List[CategoryOption]] = None
     limit: Optional[int] = 5
     tbs: Optional[str] = None
+    filter: Optional[str] = None
+    lang: Optional[str] = None
+    enterprise: Optional[List[Literal["default", "anon", "zdr"]]] = None
+    country: Optional[str] = None
     location: Optional[str] = None
     ignore_invalid_urls: Optional[bool] = None
+    async_scraping: Optional[bool] = None
     timeout: Optional[int] = 300000
     scrape_options: Optional[ScrapeOptions] = None
     integration: Optional[str] = None
