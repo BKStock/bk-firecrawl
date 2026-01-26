@@ -108,6 +108,7 @@ const createContext = async (skipTlsVerification: boolean = false) => {
     userAgent,
     viewport,
     ignoreHTTPSErrors: skipTlsVerification,
+    acceptDownloads: true,
   };
 
   if (PROXY_SERVER && PROXY_USERNAME && PROXY_PASSWORD) {
@@ -160,9 +161,41 @@ const isValidUrl = (urlString: string): boolean => {
   }
 };
 
-const scrapePage = async (page: Page, url: string, waitUntil: 'load' | 'networkidle', waitAfterLoad: number, timeout: number, checkSelector: string | undefined) => {
+const scrapePage = async (
+  page: Page,
+  requestContext: BrowserContext,
+  url: string,
+  waitUntil: 'load' | 'networkidle',
+  waitAfterLoad: number,
+  timeout: number,
+  checkSelector: string | undefined,
+  headers?: { [key: string]: string },
+) => {
   console.log(`Navigating to ${url} with waitUntil: ${waitUntil} and timeout: ${timeout}ms`);
-  const response = await page.goto(url, { waitUntil, timeout });
+  let response = null;
+  try {
+    response = await page.goto(url, { waitUntil, timeout });
+  } catch (error) {
+    console.warn('Navigation error, falling back to API request', error);
+    const apiResponse = await requestContext.request.get(url, {
+      timeout,
+      headers,
+    });
+    const responseHeaders = apiResponse.headers();
+    const contentType = responseHeaders['content-type'];
+    const buffer = await apiResponse.body();
+    const content = contentType?.includes('application/octet-stream') ||
+      contentType?.includes('application/pdf')
+      ? buffer.toString('base64')
+      : buffer.toString('utf8');
+
+    return {
+      content,
+      status: apiResponse.status(),
+      headers: responseHeaders,
+      contentType,
+    };
+  }
 
   if (waitAfterLoad > 0) {
     await page.waitForTimeout(waitAfterLoad);
@@ -176,20 +209,36 @@ const scrapePage = async (page: Page, url: string, waitUntil: 'load' | 'networki
     }
   }
 
-  let headers = null, content = await page.content();
+  let responseHeaders = null;
+  let content = await page.content();
   let ct: string | undefined = undefined;
   if (response) {
-    headers = await response.allHeaders();
-    ct = Object.entries(headers).find(([key]) => key.toLowerCase() === "content-type")?.[1];
-    if (ct && (ct.toLowerCase().includes("application/json") || ct.toLowerCase().includes("text/plain"))) {
-      content = (await response.body()).toString("utf8"); // TODO: determine real encoding
+    responseHeaders = await response.allHeaders();
+    ct = Object.entries(responseHeaders).find(([key]) => key.toLowerCase() === "content-type")?.[1];
+    if (ct) {
+      const normalized = ct.toLowerCase();
+      const shouldUseBody =
+        normalized.includes("application/json") ||
+        normalized.includes("text/plain") ||
+        normalized.includes("application/xml") ||
+        normalized.includes("text/xml") ||
+        normalized.includes("application/octet-stream") ||
+        normalized.includes("application/pdf");
+      if (shouldUseBody) {
+        const buffer = await response.body();
+        content =
+          normalized.includes("application/octet-stream") ||
+          normalized.includes("application/pdf")
+            ? buffer.toString("base64")
+            : buffer.toString("utf8"); // TODO: determine real encoding
+      }
     }
   }
 
   return {
     content,
     status: response ? response.status() : null,
-    headers,
+    headers: responseHeaders,
     contentType: ct,
   };
 };
@@ -260,7 +309,16 @@ app.post('/scrape', async (req: Request, res: Response) => {
       await page.setExtraHTTPHeaders(headers);
     }
 
-    const result = await scrapePage(page, url, 'load', wait_after_load, timeout, check_selector);
+    const result = await scrapePage(
+      page,
+      requestContext,
+      url,
+      'load',
+      wait_after_load,
+      timeout,
+      check_selector,
+      headers,
+    );
     const pageError = result.status !== 200 ? getError(result.status) : undefined;
 
     if (!pageError) {
