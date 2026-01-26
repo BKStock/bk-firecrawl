@@ -25,8 +25,29 @@ export const getBrandingScript = () => String.raw`
     BUTTON_SELECTOR: 'button,input[type="submit"],input[type="button"],[role=button],[data-primary-button],[data-secondary-button],[data-cta],a.button,a.btn,[class*="btn"],[class*="button"],a[class*="bg-brand"],a[class*="bg-primary"],a[class*="bg-accent"]',
   };
 
+  const EMPTY_STYLE = {
+    getPropertyValue: () => "",
+    backgroundColor: "",
+    fontFamily: "",
+    fontSize: "",
+    paddingTop: "",
+    paddingBottom: "",
+    paddingLeft: "",
+    paddingRight: "",
+    borderRadius: "",
+    borderTopWidth: "",
+    borderBottomWidth: "",
+    borderLeftWidth: "",
+    borderRightWidth: "",
+  };
+
+  const isElement = el => !!(el && el.nodeType === 1);
+
   const styleCache = new WeakMap();
   const getComputedStyleCached = (el) => {
+    if (!isElement(el)) {
+      return EMPTY_STYLE;
+    }
     if (styleCache.has(el)) {
       return styleCache.get(el);
     }
@@ -35,19 +56,18 @@ export const getBrandingScript = () => String.raw`
     return style;
   };
 
+  const getFontSizePx = el => {
+    const size = parseFloat(getComputedStyleCached(el).fontSize);
+    return Number.isFinite(size) ? size : 16;
+  };
+
   const toPx = v => {
     if (!v || v === "auto") return null;
     if (v.endsWith("px")) return parseFloat(v);
     if (v.endsWith("rem"))
-      return (
-        parseFloat(v) *
-        parseFloat(getComputedStyle(document.documentElement).fontSize || 16)
-      );
+      return parseFloat(v) * getFontSizePx(document.documentElement);
     if (v.endsWith("em"))
-      return (
-        parseFloat(v) *
-        parseFloat(getComputedStyle(document.body).fontSize || 16)
-      );
+      return parseFloat(v) * getFontSizePx(document.body || document.documentElement);
     if (v.endsWith("%")) return null;
     const num = parseFloat(v);
     return Number.isFinite(num) ? num : null;
@@ -869,10 +889,11 @@ export const getBrandingScript = () => String.raw`
       );
     };
 
-    const h1 = document.querySelector("h1") || document.body;
+    const root = document.body || document.documentElement;
+    const h1 = document.querySelector("h1") || root;
     const h2 = document.querySelector("h2") || h1;
-    const p = document.querySelector("p") || document.body;
-    const body = document.body;
+    const p = document.querySelector("p") || root;
+    const body = root;
 
     return {
       stacks: {
@@ -918,22 +939,22 @@ export const getBrandingScript = () => String.raw`
     const html = document.documentElement;
 
     const hasDarkIndicator =
-      html.classList.contains("dark") ||
-      body.classList.contains("dark") ||
-      html.classList.contains("dark-mode") ||
-      body.classList.contains("dark-mode") ||
-      html.getAttribute("data-theme") === "dark" ||
-      body.getAttribute("data-theme") === "dark" ||
-      html.getAttribute("data-bs-theme") === "dark";
+      html?.classList?.contains("dark") ||
+      body?.classList?.contains("dark") ||
+      html?.classList?.contains("dark-mode") ||
+      body?.classList?.contains("dark-mode") ||
+      html?.getAttribute?.("data-theme") === "dark" ||
+      body?.getAttribute?.("data-theme") === "dark" ||
+      html?.getAttribute?.("data-bs-theme") === "dark";
 
     const hasLightIndicator =
-      html.classList.contains("light") ||
-      body.classList.contains("light") ||
-      html.classList.contains("light-mode") ||
-      body.classList.contains("light-mode") ||
-      html.getAttribute("data-theme") === "light" ||
-      body.getAttribute("data-theme") === "light" ||
-      html.getAttribute("data-bs-theme") === "light";
+      html?.classList?.contains("light") ||
+      body?.classList?.contains("light") ||
+      html?.classList?.contains("light-mode") ||
+      body?.classList?.contains("light-mode") ||
+      html?.getAttribute?.("data-theme") === "light" ||
+      body?.getAttribute?.("data-theme") === "light" ||
+      html?.getAttribute?.("data-bs-theme") === "light";
 
     let prefersDark = false;
     try {
