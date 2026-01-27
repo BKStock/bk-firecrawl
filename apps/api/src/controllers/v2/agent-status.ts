@@ -8,9 +8,11 @@ import { logger as _logger, logger } from "../../lib/logger";
 import { getJobFromGCS, getPartialJobFromGCS } from "../../lib/gcs-jobs";
 import { config } from "../../config";
 
-const MAX_CREDITS_EXCEEDED_CODE = "MAX_CREDITS_EXCEEDED";
+const MAX_CREDITS_EXCEEDED_CODE = "MAX_CREDITS_EXCEEDED" as const;
 
-function getAgentErrorCode(error?: string | null): string | undefined {
+function getAgentErrorCode(
+  error?: string | null,
+): typeof MAX_CREDITS_EXCEEDED_CODE | undefined {
   if (!error) return undefined;
   if (error === MAX_CREDITS_EXCEEDED_CODE) return MAX_CREDITS_EXCEEDED_CODE;
   if (error.startsWith(`${MAX_CREDITS_EXCEEDED_CODE}:`)) {

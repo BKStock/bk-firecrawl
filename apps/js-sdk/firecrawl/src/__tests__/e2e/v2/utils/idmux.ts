@@ -13,6 +13,36 @@ export type Identity = {
 };
 
 let cachedIdentity: Identity | null = null;
+const IDMUX_RETRY_ATTEMPTS = 3;
+const IDMUX_RETRY_BASE_DELAY_MS = 250;
+
+type ErrorWithCode = {
+  code?: string;
+  cause?: { code?: string };
+};
+
+function getErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const withCode = error as ErrorWithCode;
+  if (withCode.cause?.code) return withCode.cause.code;
+  if (withCode.code) return withCode.code;
+  return undefined;
+}
+
+function isRetryableIdmuxError(error: unknown): boolean {
+  const code = getErrorCode(error);
+  return (
+    code === "EAI_AGAIN" ||
+    code === "ENOTFOUND" ||
+    code === "ECONNREFUSED" ||
+    code === "ECONNRESET" ||
+    code === "ETIMEDOUT"
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export function getApiUrl(): string {
   return process.env.TEST_URL ?? process.env.FIRECRAWL_API_URL ?? "https://api.firecrawl.dev";
@@ -40,19 +70,30 @@ export async function getIdentity(req: IdmuxRequest = {}): Promise<Identity> {
     ...req,
   };
 
-  const res = await fetch(`${idmuxUrl}/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  for (let attempt = 1; attempt <= IDMUX_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      const res = await fetch(`${idmuxUrl}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`idmux request failed: ${res.status} ${text}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`idmux request failed: ${res.status} ${text}`);
+      }
+
+      const identity = (await res.json()) as Identity;
+      cachedIdentity = identity;
+      return identity;
+    } catch (error) {
+      if (!isRetryableIdmuxError(error) || attempt === IDMUX_RETRY_ATTEMPTS) {
+        throw error;
+      }
+
+      await sleep(IDMUX_RETRY_BASE_DELAY_MS * attempt);
+    }
   }
 
-  const identity = (await res.json()) as Identity;
-  cachedIdentity = identity;
-  return identity;
+  throw new Error("idmux request failed after retries");
 }
-
