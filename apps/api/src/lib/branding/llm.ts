@@ -2,7 +2,7 @@ import { generateObject } from "ai";
 import * as Sentry from "@sentry/node";
 import { logger } from "../logger";
 import { config } from "../../config";
-import { BrandingEnhancement, brandingEnhancementSchema } from "./schema";
+import { BrandingEnhancement, getBrandingEnhancementSchema } from "./schema";
 import { buildBrandingPrompt } from "./prompt";
 import { BrandingLLMInput } from "./types";
 import { getModel } from "../generic-ai";
@@ -83,9 +83,15 @@ export async function enhanceBrandingWithLLM(
   }
 
   try {
+    // Use schema with logoSelection only if logo candidates are provided
+    const hasLogoCandidates = !!(
+      input.logoCandidates && input.logoCandidates.length > 0
+    );
+    const schema = getBrandingEnhancementSchema(hasLogoCandidates);
+
     const result = await generateObject({
       model,
-      schema: brandingEnhancementSchema,
+      schema,
       providerOptions: {
         openai: {
           strictJsonSchema: true,
@@ -124,6 +130,9 @@ export async function enhanceBrandingWithLLM(
           : result.reasoning
         : undefined;
 
+      // Type assertion to handle optional logoSelection
+      const resultObject = result.object as BrandingEnhancement;
+
       logger.info("LLM branding response", {
         model: modelName,
         buttonsCount,
@@ -135,12 +144,12 @@ export async function enhanceBrandingWithLLM(
         reasoning: reasoningPreview,
         reasoningLength: result.reasoning?.length || 0,
         warnings: result.warnings,
-        hasObject: !!result.object,
-        objectKeys: result.object ? Object.keys(result.object) : [],
-        buttonClassification: result.object?.buttonClassification,
-        colorRoles: result.object?.colorRoles,
-        cleanedFontsLength: result.object?.cleanedFonts?.length || 0,
-        logoSelection: result.object?.logoSelection,
+        hasObject: !!resultObject,
+        objectKeys: resultObject ? Object.keys(resultObject) : [],
+        buttonClassification: resultObject?.buttonClassification,
+        colorRoles: resultObject?.colorRoles,
+        cleanedFontsLength: resultObject?.cleanedFonts?.length || 0,
+        logoSelection: resultObject?.logoSelection,
       });
 
       if (result.reasoning && result.reasoning.length > 1000) {
@@ -150,7 +159,8 @@ export async function enhanceBrandingWithLLM(
       }
     }
 
-    return result.object;
+    // Type assertion to handle optional logoSelection
+    return result.object as BrandingEnhancement;
   } catch (error) {
     Sentry.withScope(scope => {
       scope.setTag("feature", "branding-llm");

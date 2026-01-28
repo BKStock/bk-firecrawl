@@ -675,9 +675,373 @@ export const getBrandingScript = () => String.raw`
 
     const extractBackgroundImageUrl = (bgImage) => {
       if (!bgImage || bgImage === 'none') return null;
-      // Match url(...) or url("...") or url('...')
-      const match = bgImage.match(/url\(['"]?([^'"]+)['"]?\)/);
-      return match ? match[1] : null;
+      
+      // Try to match url("...") or url('...') first - handle quoted URLs
+      // This handles both data URIs and regular URLs with quotes
+      const quotedMatch = bgImage.match(/url\((["'])(.*?)\1\)/);
+      if (quotedMatch) {
+        let url = quotedMatch[2];
+        // Handle HTML entities that might still be encoded
+        if (url.includes('&quot;') || url.includes('&lt;') || url.includes('&gt;')) {
+          url = url.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+        }
+        
+        // For data URIs with SVG content, ensure proper URL encoding
+        // Check if it's already URL-encoded (has charset=utf-8 or starts with %)
+        if (url.startsWith('data:image/svg+xml')) {
+          // Check if already encoded (has charset=utf-8 or starts with %)
+          const isAlreadyEncoded = url.includes('charset=utf-8') || 
+                                   (url.includes('data:image/svg+xml,') && url.split('data:image/svg+xml,')[1]?.startsWith('%'));
+          
+          if (!isAlreadyEncoded) {
+            // Extract the SVG content (handle both with and without charset)
+            let svgContent = '';
+            if (url.includes('charset=utf-8,')) {
+              svgContent = url.split('charset=utf-8,')[1];
+            } else if (url.includes('data:image/svg+xml,')) {
+              svgContent = url.split('data:image/svg+xml,')[1];
+            }
+            
+            if (svgContent) {
+              // Remove any escaped quotes that might cause XML parsing errors
+              let cleanSvg = svgContent.replace(/\\"/g, '"').replace(/\\'/g, "'");
+              // URL-encode the SVG content to ensure it's valid
+              try {
+                const encodedSvg = encodeURIComponent(cleanSvg);
+                url = 'data:image/svg+xml;charset=utf-8,' + encodedSvg;
+              } catch (e) {
+                // If encoding fails, try to at least fix common issues
+                url = 'data:image/svg+xml;charset=utf-8,' + cleanSvg.replace(/"/g, '%22').replace(/'/g, '%27');
+              }
+            }
+          }
+          // If already encoded, use as-is (it's already valid)
+        }
+        
+        if (debugLogo && (url.includes('cal.com') || url.includes('Cal.com') || url.startsWith('data:'))) {
+          console.log('🔥 [LOGO DEBUG] Extracted quoted URL:', {
+            original: bgImage.substring(0, 200) + '...',
+            extracted: url.substring(0, 100) + '...',
+            isDataUri: url.startsWith('data:'),
+          });
+        }
+        
+        return url;
+      }
+      
+      // Try to match url(...) without quotes
+      // For data URIs, match until the closing paren (they can be very long)
+      const unquotedMatch = bgImage.match(/url\((data:[^)]+)\)/);
+      if (unquotedMatch) {
+        let url = unquotedMatch[1];
+        // Handle HTML entities
+        if (url.includes('&quot;') || url.includes('&lt;') || url.includes('&gt;')) {
+          url = url.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+        }
+        
+        // For data URIs with SVG content, ensure proper URL encoding
+        // Check if it's already URL-encoded (has charset=utf-8 or starts with %)
+        if (url.startsWith('data:image/svg+xml')) {
+          // Check if already encoded (has charset=utf-8 or starts with %)
+          const isAlreadyEncoded = url.includes('charset=utf-8') || 
+                                   url.includes('data:image/svg+xml,') && url.split('data:image/svg+xml,')[1]?.startsWith('%');
+          
+          if (!isAlreadyEncoded) {
+            // Extract the SVG content (handle both with and without charset)
+            let svgContent = '';
+            if (url.includes('charset=utf-8,')) {
+              svgContent = url.split('charset=utf-8,')[1];
+            } else if (url.includes('data:image/svg+xml,')) {
+              svgContent = url.split('data:image/svg+xml,')[1];
+            }
+            
+            if (svgContent) {
+              // Remove any escaped quotes that might cause XML parsing errors
+              let cleanSvg = svgContent.replace(/\\"/g, '"').replace(/\\'/g, "'");
+              // URL-encode the SVG content to ensure it's valid
+              try {
+                const encodedSvg = encodeURIComponent(cleanSvg);
+                url = 'data:image/svg+xml;charset=utf-8,' + encodedSvg;
+              } catch (e) {
+                // If encoding fails, try to at least fix common issues
+                url = 'data:image/svg+xml;charset=utf-8,' + cleanSvg.replace(/"/g, '%22').replace(/'/g, '%27');
+              }
+            }
+          }
+          // If already encoded, use as-is (it's already valid)
+        }
+        
+        if (debugLogo && (url.includes('cal.com') || url.includes('Cal.com'))) {
+          console.log('🔥 [LOGO DEBUG] Extracted unquoted data URI:', {
+            original: bgImage.substring(0, 200) + '...',
+            extracted: url.substring(0, 100) + '...',
+          });
+        }
+        
+        return url;
+      }
+      
+      // Fallback: try simple pattern for regular URLs
+      const simpleMatch = bgImage.match(/url\(([^)]+)\)/);
+      if (simpleMatch) {
+        let url = simpleMatch[1].trim().replace(/^["']|["']$/g, ''); // Remove surrounding quotes if any
+        
+        // For data URIs with SVG content, ensure proper URL encoding
+        // Check if it's already URL-encoded (has charset=utf-8 or starts with %)
+        if (url.startsWith('data:image/svg+xml')) {
+          // Check if already encoded (has charset=utf-8 or starts with %)
+          const isAlreadyEncoded = url.includes('charset=utf-8') || 
+                                   url.includes('data:image/svg+xml,') && url.split('data:image/svg+xml,')[1]?.startsWith('%');
+          
+          if (!isAlreadyEncoded) {
+            // Extract the SVG content (handle both with and without charset)
+            let svgContent = '';
+            if (url.includes('charset=utf-8,')) {
+              svgContent = url.split('charset=utf-8,')[1];
+            } else if (url.includes('data:image/svg+xml,')) {
+              svgContent = url.split('data:image/svg+xml,')[1];
+            }
+            
+            if (svgContent) {
+              let cleanSvg = svgContent.replace(/\\"/g, '"').replace(/\\'/g, "'");
+              try {
+                const encodedSvg = encodeURIComponent(cleanSvg);
+                url = 'data:image/svg+xml;charset=utf-8,' + encodedSvg;
+              } catch (e) {
+                url = 'data:image/svg+xml;charset=utf-8,' + cleanSvg.replace(/"/g, '%22').replace(/'/g, '%27');
+              }
+            }
+          }
+          // If already encoded, use as-is (it's already valid)
+        }
+        
+        return url;
+      }
+      
+      return null;
+    };
+
+    // Helper function to check if an href is a home link (including full URLs)
+    const isHomeHref = (href) => {
+      if (!href) return false;
+      
+      const normalizedHref = href.trim();
+      
+      // Check for relative home paths
+      if (normalizedHref === './' || 
+          normalizedHref === '/' || 
+          normalizedHref === '/home' || 
+          normalizedHref === '/index' ||
+          normalizedHref === '') {
+        return true;
+      }
+      
+      // Check for full URLs that point to homepage
+      if (normalizedHref.startsWith('http://') || 
+          normalizedHref.startsWith('https://') || 
+          normalizedHref.startsWith('//')) {
+        try {
+          const currentHostname = window.location.hostname.toLowerCase();
+          const linkUrl = new URL(href, window.location.origin);
+          const linkHostname = linkUrl.hostname.toLowerCase();
+          
+          // Same domain and path is root or home/index
+          if (linkHostname === currentHostname && 
+              (linkUrl.pathname === '/' || 
+               linkUrl.pathname === '/home' || 
+               linkUrl.pathname === '/index' ||
+               linkUrl.pathname === '/index.html')) {
+            return true;
+          }
+        } catch (e) {
+          // URL parsing failed, not a home link
+        }
+      }
+      
+      return false;
+    };
+
+    // Extract sprite portion from a sprite sheet
+    // Returns a data URI of the cropped sprite portion, or null if extraction fails
+    const extractSpritePortion = (spriteUrl, el, style) => {
+      try {
+        // Check if background-position is set (indicates sprite sheet usage)
+        const bgPosition = style.getPropertyValue('background-position');
+        const bgSize = style.getPropertyValue('background-size');
+        
+        // If no background-position or it's "0 0", might not be a sprite (or using first sprite)
+        // Still check if background-size suggests sprite usage
+        const hasSpriteIndicators = bgPosition && bgPosition !== '0px 0px' && bgPosition !== '0% 0%' && bgPosition !== '0 0';
+        const hasSpriteSize = bgSize && bgSize !== 'auto' && bgSize !== 'cover' && bgSize !== 'contain';
+        
+        if (!hasSpriteIndicators && !hasSpriteSize) {
+          return null; // Not a sprite sheet
+        }
+
+        const rect = el.getBoundingClientRect();
+        const elementWidth = rect.width;
+        const elementHeight = rect.height;
+        
+        if (elementWidth <= 0 || elementHeight <= 0) {
+          return null;
+        }
+
+        // Parse background-position (can be "x y", "x% y%", "xpx ypx", etc.)
+        const parsePosition = (pos) => {
+          if (!pos || pos === '0' || pos === '0px' || pos === '0%') return 0;
+          const parts = pos.trim().split(/\s+/);
+          if (parts.length < 2) return 0;
+          
+          // Parse X position
+          let x = 0;
+          if (parts[0].endsWith('px')) {
+            x = parseFloat(parts[0]);
+          } else if (parts[0].endsWith('%')) {
+            // For percentage, we'd need sprite dimensions - skip for now, use pixel values
+            return null;
+          } else {
+            x = parseFloat(parts[0]) || 0;
+          }
+          
+          // Parse Y position
+          let y = 0;
+          if (parts[1].endsWith('px')) {
+            y = parseFloat(parts[1]);
+          } else if (parts[1].endsWith('%')) {
+            return null; // Skip percentage for now
+          } else {
+            y = parseFloat(parts[1]) || 0;
+          }
+          
+          return { x: -x, y: -y }; // Negative because background-position is the offset
+        };
+
+        const position = parsePosition(bgPosition);
+        if (!position) {
+          return null; // Couldn't parse position
+        }
+
+        // Try to load and extract the sprite
+        // Note: This requires the image to be already loaded (in cache)
+        // We'll try to create an image element and see if it's accessible
+        const img = new Image();
+        img.crossOrigin = 'anonymous'; // Try to handle CORS
+        
+        // For now, we'll attempt synchronous extraction if possible
+        // If the image is in cache, we might be able to access it
+        // Otherwise, we'll return null and use the full sprite URL
+        
+        // Create a canvas to extract the sprite portion
+        const canvas = document.createElement('canvas');
+        canvas.width = elementWidth;
+        canvas.height = elementHeight;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          return null;
+        }
+
+        // Try to draw the sprite portion
+        // This is a synchronous attempt - if image isn't loaded, it won't work
+        // We'll need to handle this asynchronously or mark for post-processing
+        // For now, return null to indicate sprite needs special handling
+        // The backend could handle sprite extraction, or we could add async support
+        
+        // Actually, let's try a different approach: return metadata about the sprite
+        // that can be used for extraction later, or attempt async loading
+        // But since we need to return synchronously, let's mark it and return the full URL
+        
+        return null; // Indicates sprite extraction needed but can't be done synchronously
+      } catch (e) {
+        recordError("extractSpritePortion", e);
+        return null;
+      }
+    };
+
+    // Async helper to extract sprite portion (for use when async is possible)
+    const extractSpritePortionAsync = async (spriteUrl, el, style) => {
+      try {
+        const bgPosition = style.getPropertyValue('background-position');
+        const bgSize = style.getPropertyValue('background-size');
+        
+        const hasSpriteIndicators = bgPosition && bgPosition !== '0px 0px' && bgPosition !== '0% 0%' && bgPosition !== '0 0';
+        const hasSpriteSize = bgSize && bgSize !== 'auto' && bgSize !== 'cover' && bgSize !== 'contain';
+        
+        if (!hasSpriteIndicators && !hasSpriteSize) {
+          return null;
+        }
+
+        const rect = el.getBoundingClientRect();
+        const elementWidth = Math.max(rect.width, 1);
+        const elementHeight = Math.max(rect.height, 1);
+        
+        // Parse background-position
+        const parsePosition = (pos) => {
+          if (!pos || pos === '0' || pos === '0px' || pos === '0%') return { x: 0, y: 0 };
+          const parts = pos.trim().split(/\s+/);
+          if (parts.length < 2) return { x: 0, y: 0 };
+          
+          let x = 0;
+          if (parts[0].endsWith('px')) {
+            x = parseFloat(parts[0]) || 0;
+          } else if (parts[0].endsWith('%')) {
+            // For percentage, we'd need sprite dimensions
+            return null;
+          } else {
+            x = parseFloat(parts[0]) || 0;
+          }
+          
+          let y = 0;
+          if (parts[1].endsWith('px')) {
+            y = parseFloat(parts[1]) || 0;
+          } else if (parts[1].endsWith('%')) {
+            return null;
+          } else {
+            y = parseFloat(parts[1]) || 0;
+          }
+          
+          return { x: -x, y: -y };
+        };
+
+        const position = parsePosition(bgPosition);
+        if (!position) {
+          return null;
+        }
+
+        // Load the sprite image
+        const img = await new Promise((resolve, reject) => {
+          const image = new Image();
+          image.crossOrigin = 'anonymous';
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error('Failed to load sprite image'));
+          image.src = spriteUrl;
+        });
+
+        // Create canvas and extract the sprite portion
+        const canvas = document.createElement('canvas');
+        canvas.width = elementWidth;
+        canvas.height = elementHeight;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          return null;
+        }
+
+        // Draw the sprite portion
+        ctx.drawImage(
+          img,
+          -position.x, -position.y, // Source position in sprite
+          elementWidth, elementHeight, // Source size
+          0, 0, // Destination position
+          elementWidth, elementHeight // Destination size
+        );
+
+        // Convert to data URI
+        return canvas.toDataURL('image/png');
+      } catch (e) {
+        recordError("extractSpritePortionAsync", e);
+        return null;
+      }
     };
 
     const collectLogoCandidate = (el, source) => {
@@ -686,6 +1050,26 @@ export const getBrandingScript = () => String.raw`
       if (debugStats) {
         debugStats.attempted += 1;
       }
+      
+      // Debug logging for specific cases
+      const dataName = el.getAttribute('data-framer-name') || el.getAttribute('data-name') || '';
+      const parentLink = el.closest('a');
+      const parentAria = parentLink?.getAttribute('aria-label') || '';
+      const parentHref = parentLink?.getAttribute('href') || '';
+      const isCalComCase = dataName.toLowerCase().includes('cal.com logo') || 
+                          (parentAria.toLowerCase().includes('cal.com') && parentHref === './');
+      
+      if (debugLogo && isCalComCase) {
+        console.log('🔥 [LOGO DEBUG] collectLogoCandidate called:', {
+          source,
+          tag: el.tagName,
+          dataName,
+          parentAria,
+          parentHref,
+          rect: { w: rect.width, h: rect.height, top: rect.top, left: rect.left },
+        });
+      }
+      
       const isVisible = (
         rect.width > 0 &&
         rect.height > 0 &&
@@ -693,14 +1077,45 @@ export const getBrandingScript = () => String.raw`
         style.visibility !== "hidden" &&
         style.opacity !== "0"
       );
+      
+      if (debugLogo && isCalComCase) {
+        console.log('🔥 [LOGO DEBUG] Visibility check:', { isVisible, width: rect.width, height: rect.height });
+      }
 
       // Check for CSS background-image logos (common pattern)
       const bgImage = style.getPropertyValue('background-image');
       const bgImageUrl = extractBackgroundImageUrl(bgImage);
+      
+      // Check for logo indicators in various places (reuse parentLink from debug section above)
+      const parentAriaLabel = parentLink?.getAttribute('aria-label') || '';
+      const hasLogoAriaLabel = /logo|home|brand/i.test(parentAriaLabel);
+      const hasLogoDataAttr = el.getAttribute('data-framer-name')?.toLowerCase().includes('logo') ||
+                              el.getAttribute('data-name')?.toLowerCase().includes('logo');
+      const inHeaderNav = el.closest('header, nav, [role="banner"]') !== null;
+      const hasHomeHref = parentLink && isHomeHref(parentLink.getAttribute('href') || '');
+      
+      if (debugLogo && isCalComCase) {
+        console.log('🔥 [LOGO DEBUG] Background image check:', {
+          hasBgImage: !!bgImage && bgImage !== 'none',
+          bgImagePreview: bgImage ? bgImage.substring(0, 200) + '...' : null,
+          bgImageUrl: bgImageUrl ? bgImageUrl.substring(0, 100) + '...' : null,
+          hasLogoDataAttr,
+          hasLogoAriaLabel,
+          hasHomeHref,
+          inHeaderNav,
+          parentAriaLabel,
+          parentHref: parentLink?.getAttribute('href'),
+        });
+      }
+      
       const hasBackgroundLogo = bgImageUrl && (
         /logo/i.test(bgImageUrl) ||
         el.closest('[class*="logo" i], [id*="logo" i]') !== null ||
-        (el.tagName.toLowerCase() === 'a' && el.closest('header, nav, [role="banner"]') !== null)
+        (el.tagName.toLowerCase() === 'a' && inHeaderNav) ||
+        (parentLink && inHeaderNav && hasHomeHref) ||
+        hasLogoAriaLabel ||
+        hasLogoDataAttr ||
+        (parentLink && inHeaderNav && /home/i.test(parentAriaLabel))
       );
 
       const imgSrc = el.src || '';
@@ -719,7 +1134,39 @@ export const getBrandingScript = () => String.raw`
 
       const inHeader = el.closest(
         'header, nav, [role="banner"], #navbar, [id*="navbar" i], [class*="navbar" i], [id*="header" i], [class*="header" i]',
-      );
+      ) !== null;
+      
+      // Also check if parent link is in header (for divs inside links)
+      const parentInHeader = parentLink && parentLink.closest(
+        'header, nav, [role="banner"], #navbar, [id*="navbar" i], [class*="navbar" i], [id*="header" i], [class*="header" i]',
+      ) !== null;
+      
+      // Check if element is in a top-level navigation container (sticky/fixed at top, or first visible element)
+      // This catches cases where the header isn't a <header> element but acts like one
+      let inTopLevelNav = false;
+      if (!inHeader && !parentInHeader) {
+        const topLevelContainer = el.closest('[class*="sticky" i], [class*="fixed" i], [style*="position: sticky" i], [style*="position:fixed" i]');
+        if (topLevelContainer) {
+          const containerRect = topLevelContainer.getBoundingClientRect();
+          const containerStyle = getComputedStyleCached(topLevelContainer);
+          const isAtTop = containerRect.top <= 50; // Within 50px of top
+          const hasNavLikeContent = topLevelContainer.querySelector('nav, a[href="/"], a[href="./"]') !== null;
+          const hasStickyOrFixed = /sticky|fixed/i.test(containerStyle.position) || 
+                                   /top-0|top:0|top:\s*0/i.test(containerStyle.cssText);
+          
+          if (isAtTop && (hasNavLikeContent || hasStickyOrFixed)) {
+            inTopLevelNav = true;
+          }
+        }
+        
+        // Also check if element itself is near the top of the page (first visible element)
+        // and has a home link - this is a strong indicator it's a logo
+        if (!inTopLevelNav && hasHomeHref && rect.top <= 100 && rect.left <= 200) {
+          inTopLevelNav = true;
+        }
+      }
+      
+      const finalInHeader = inHeader || parentInHeader || inTopLevelNav;
       
       // Check if element is inside a language switcher - be more specific
       // Skip small flag images (usually language flags) or elements inside language lists
@@ -758,8 +1205,31 @@ export const getBrandingScript = () => String.raw`
       
       const insideButton = el.closest('button, [role="button"], input[type="button"], input[type="submit"]');
       if (insideButton) {
-        recordSkip("inside-button", el, rect);
-        return;
+        // Don't skip if this is clearly a logo in a nav/header context
+        // Many logos are wrapped in clickable divs with role="button" for accessibility
+        const isLogoInNavContext = (
+          finalInHeader && // In header/nav
+          (hasHomeHref || hasLogoAriaLabel || hasLogoDataAttr) // Has logo indicators
+        );
+        
+        // Also allow if the button-like element itself has logo indicators
+        const buttonHasLogoIndicators = insideButton && (
+          /logo|brand/i.test(getClassNameString(insideButton)) ||
+          /logo|brand/i.test(insideButton.getAttribute('data-framer-name') || '') ||
+          /logo|brand/i.test(insideButton.getAttribute('data-name') || '') ||
+          /logo|home|brand/i.test(insideButton.getAttribute('aria-label') || '')
+        );
+        
+        // Also check if the element itself (img/svg) has logo indicators in alt or aria-label
+        const elementHasLogoIndicators = (
+          /logo|brand/i.test(el.getAttribute('alt') || '') ||
+          /logo|brand/i.test(el.getAttribute('aria-label') || '')
+        );
+        
+        if (!isLogoInNavContext && !buttonHasLogoIndicators && !elementHasLogoIndicators) {
+          recordSkip("inside-button", el, rect);
+          return;
+        }
       }
       
 
@@ -977,28 +1447,205 @@ export const getBrandingScript = () => String.raw`
       } else {
         src = el.src || "";
         
-        // If no src but has background-image logo, use that
-        if (!src && hasBackgroundLogo && bgImageUrl) {
-          // Convert relative URL to absolute
-          try {
-            const url = new URL(bgImageUrl, window.location.origin);
-            src = url.href;
-          } catch (e) {
-            // If URL parsing fails, try to construct it manually
-            if (bgImageUrl.startsWith('/')) {
-              src = window.location.origin + bgImageUrl;
-            } else if (bgImageUrl.startsWith('http://') || bgImageUrl.startsWith('https://')) {
-              src = bgImageUrl;
-            } else {
-              src = window.location.origin + '/' + bgImageUrl;
-            }
+        // If no src but has background-image, check if it should be treated as a logo
+        // For divs with strong logo indicators, always use background-image if present
+        if (!src && bgImageUrl) {
+          // Check if this should be treated as a logo
+          const shouldTreatAsLogo = hasBackgroundLogo || 
+                                    hasLogoDataAttr || 
+                                    hasLogoAriaLabel || 
+                                    hasHomeHref ||
+                                    (parentLink && inHeaderNav);
+          
+          if (debugLogo && isCalComCase) {
+            console.log('🔥 [LOGO DEBUG] Should treat as logo?', {
+              shouldTreatAsLogo,
+              hasBackgroundLogo,
+              hasLogoDataAttr,
+              hasLogoAriaLabel,
+              hasHomeHref,
+              inHeaderNav: parentLink && inHeaderNav,
+            });
           }
           
-          // Update indicators for background-image logos
-          if (!srcMatch) srcMatch = /logo/i.test(bgImageUrl);
-          if (!classMatch)
-            classMatch =
-              el.closest('[class*="logo" i], [id*="logo" i]') !== null;
+          if (shouldTreatAsLogo) {
+            // Check if this is a sprite sheet
+            const bgPosition = style.getPropertyValue('background-position');
+            const bgSize = style.getPropertyValue('background-size');
+            const isSpriteSheet = bgPosition && bgPosition !== '0px 0px' && bgPosition !== '0% 0%' && bgPosition !== '0 0';
+            
+            // Data URIs are already absolute, use them as-is
+            if (bgImageUrl.startsWith('data:')) {
+              src = bgImageUrl;
+            } else {
+              // Convert relative URL to absolute
+              let absoluteUrl;
+              try {
+                const url = new URL(bgImageUrl, window.location.origin);
+                absoluteUrl = url.href;
+              } catch (e) {
+                // If URL parsing fails, try to construct it manually
+                if (bgImageUrl.startsWith('/')) {
+                  absoluteUrl = window.location.origin + bgImageUrl;
+                } else if (bgImageUrl.startsWith('http://') || bgImageUrl.startsWith('https://')) {
+                  absoluteUrl = bgImageUrl;
+                } else {
+                  absoluteUrl = window.location.origin + '/' + bgImageUrl;
+                }
+              }
+              
+              // If it's a sprite sheet, try to extract the portion
+              if (isSpriteSheet) {
+                // Parse background-position
+                const parsePosition = (pos) => {
+                  if (!pos) return { x: 0, y: 0 };
+                  const parts = pos.trim().split(/\s+/);
+                  if (parts.length < 2) return { x: 0, y: 0 };
+                  
+                  let x = 0;
+                  if (parts[0].endsWith('px')) {
+                    x = parseFloat(parts[0]) || 0;
+                  } else if (parts[0].endsWith('%')) {
+                    // Percentage - would need sprite dimensions, use 0 for now
+                    x = 0;
+                  } else {
+                    x = parseFloat(parts[0]) || 0;
+                  }
+                  
+                  let y = 0;
+                  if (parts[1].endsWith('px')) {
+                    y = parseFloat(parts[1]) || 0;
+                  } else if (parts[1].endsWith('%')) {
+                    y = 0;
+                  } else {
+                    y = parseFloat(parts[1]) || 0;
+                  }
+                  
+                  return { x: -x, y: -y }; // Negative because background-position is offset
+                };
+                
+                const spritePosition = parsePosition(bgPosition);
+                const elementWidth = Math.max(rect.width, 1);
+                const elementHeight = Math.max(rect.height, 1);
+                
+                // Try to extract sprite portion if image is available
+                // Note: This only works if the image is already in browser cache
+                let extractedSprite = null;
+                try {
+                  // Try to find if image is already loaded (in document or cache)
+                  const existingImgs = Array.from(document.images);
+                  let spriteImg = existingImgs.find(img => {
+                    try {
+                      return img.src === absoluteUrl || img.currentSrc === absoluteUrl;
+                    } catch (e) {
+                      return false;
+                    }
+                  });
+                  
+                  // If not found, try to create and check cache
+                  if (!spriteImg) {
+                    const testImg = new Image();
+                    testImg.crossOrigin = 'anonymous';
+                    testImg.src = absoluteUrl;
+                    // Check if immediately available (cached)
+                    if (testImg.complete && testImg.naturalWidth > 0) {
+                      spriteImg = testImg;
+                    }
+                  }
+                  
+                  if (spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0 && spriteImg.naturalHeight > 0) {
+                    const spriteWidth = spriteImg.naturalWidth;
+                    const spriteHeight = spriteImg.naturalHeight;
+                    
+                    // Calculate source coordinates in the sprite
+                    // background-position like "-10px -20px" means: show sprite starting 10px from left, 20px from top
+                    // So sourceX = -spritePosition.x (which is positive after negation), sourceY = -spritePosition.y
+                    const sourceX = Math.max(0, -spritePosition.x);
+                    const sourceY = Math.max(0, -spritePosition.y);
+                    
+                    // Source dimensions: use element dimensions, but clamp to sprite bounds
+                    let sourceWidth = Math.min(elementWidth, spriteWidth - sourceX);
+                    let sourceHeight = Math.min(elementHeight, spriteHeight - sourceY);
+                    
+                    // Handle background-size if specified
+                    // If bgSize is like "350px", it means the sprite is scaled
+                    if (bgSize && bgSize !== 'auto' && bgSize !== 'cover' && bgSize !== 'contain') {
+                      const sizeMatch = bgSize.match(/(\d+(?:\.\d+)?)\s*px/i);
+                      if (sizeMatch) {
+                        const scaledWidth = parseFloat(sizeMatch[1]);
+                        const scale = scaledWidth / spriteWidth;
+                        
+                        // Adjust source coordinates and dimensions for scaling
+                        sourceWidth = Math.min(elementWidth / scale, spriteWidth - sourceX);
+                        sourceHeight = Math.min(elementHeight / scale, spriteHeight - sourceY);
+                      }
+                    }
+                    
+                    // Ensure valid dimensions
+                    if (sourceWidth > 0 && sourceHeight > 0 && 
+                        sourceX < spriteWidth && sourceY < spriteHeight &&
+                        sourceX + sourceWidth <= spriteWidth &&
+                        sourceY + sourceHeight <= spriteHeight) {
+                      
+                      const canvas = document.createElement('canvas');
+                      canvas.width = elementWidth;
+                      canvas.height = elementHeight;
+                      const ctx = canvas.getContext('2d');
+                      
+                      if (ctx) {
+                        // Draw the sprite portion
+                        // Source rectangle: (sourceX, sourceY) with size (sourceWidth, sourceHeight) from sprite
+                        // Destination: full canvas (elementWidth x elementHeight)
+                        ctx.drawImage(
+                          spriteImg,
+                          sourceX, sourceY, // Source position in sprite
+                          sourceWidth, sourceHeight, // Source size in sprite
+                          0, 0, // Destination position
+                          elementWidth, elementHeight // Destination size (element dimensions)
+                        );
+                        
+                        extractedSprite = canvas.toDataURL('image/png');
+                      }
+                    }
+                  }
+                } catch (e) {
+                  // Extraction failed - will use metadata
+                  recordError("sprite-extraction-attempt", e);
+                }
+                
+                if (extractedSprite) {
+                  // Successfully extracted sprite portion
+                  src = extractedSprite;
+                } else {
+                  // Store metadata for backend extraction
+                  src = absoluteUrl;
+                  el._spriteMetadata = {
+                    isSprite: true,
+                    spriteUrl: absoluteUrl,
+                    position: spritePosition,
+                    elementWidth,
+                    elementHeight,
+                    backgroundSize: bgSize || 'auto',
+                    backgroundPosition: bgPosition,
+                  };
+                }
+              } else {
+                // Not a sprite sheet, use URL as-is
+                src = absoluteUrl;
+              }
+            }
+            
+            // Update indicators for background-image logos
+            if (!srcMatch) srcMatch = /logo/i.test(bgImageUrl) || hasLogoDataAttr;
+            if (!classMatch)
+              classMatch =
+                el.closest('[class*="logo" i], [id*="logo" i]') !== null ||
+                hasLogoDataAttr;
+            if (!altMatch && hasLogoAriaLabel) {
+              altMatch = true;
+              alt = parentAriaLabel;
+            }
+          }
         }
       }
 
@@ -1008,7 +1655,8 @@ export const getBrandingScript = () => String.raw`
         hrefMatch = normalizedHref === '/' || 
                    normalizedHref === '/home' || 
                    normalizedHref === '/index' || 
-                   normalizedHref === '';
+                   normalizedHref === '' ||
+                   normalizedHref === './'; // Also match "./" as home
         
         if (!hrefMatch && (normalizedHref.startsWith('http://') || normalizedHref.startsWith('https://') || normalizedHref.startsWith('//'))) {
           try {
@@ -1025,18 +1673,42 @@ export const getBrandingScript = () => String.raw`
       if (!hrefMatch && ariaLabelHomeMatch) {
         hrefMatch = true;
       }
+      // Also set hrefMatch if we have strong logo indicators and home href
+      if (!hrefMatch && hasHomeHref && (hasLogoDataAttr || hasLogoAriaLabel)) {
+        hrefMatch = true;
+      }
 
       if (src) {
-        logoCandidates.push({
+        // Check if src is a data URI with SVG content
+        const isSvgDataUri = src.startsWith('data:image/svg+xml');
+        const finalIsSvg = isSvg || isSvgDataUri;
+        
+        // Debug logging for home links (even if not Cal.com case)
+        const isHomeLinkCase = hasHomeHref && (isSvg || isSvgDataUri);
+        
+        if (debugLogo && (isCalComCase || isHomeLinkCase)) {
+          console.log('🔥 [LOGO DEBUG] Adding logo candidate:', {
+            src: src.substring(0, 100) + '...',
+            isSvg: finalIsSvg,
+            isVisible,
+            location: finalInHeader ? "header" : "body",
+            indicators: { inHeader: !!finalInHeader, altMatch, srcMatch, classMatch, hrefMatch },
+            href,
+            hasHomeHref,
+            source,
+          });
+        }
+        
+        const logoCandidate = {
           src,
           alt,
           ariaLabel: candidateAriaLabel,
-          isSvg,
+          isSvg: finalIsSvg,
           isVisible,
-          location: inHeader ? "header" : "body",
+          location: finalInHeader ? "header" : "body",
           position: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
           indicators: {
-            inHeader: !!inHeader,
+            inHeader: !!finalInHeader,
             altMatch,
             srcMatch,
             classMatch,
@@ -1044,10 +1716,24 @@ export const getBrandingScript = () => String.raw`
           },
           href: href || undefined,
           source,
-          logoSvgScore: isSvg ? logoSvgScore : 100, // Images get high score by default
-        });
+          logoSvgScore: finalIsSvg ? (isSvgDataUri ? 80 : logoSvgScore) : 100, // Images get high score by default, SVG data URIs get good score
+        };
+        
+        // Add sprite metadata if this is a sprite sheet
+        if (el._spriteMetadata) {
+          logoCandidate.sprite = el._spriteMetadata;
+        }
+        
+        logoCandidates.push(logoCandidate);
         recordAdd(logoCandidates[logoCandidates.length - 1]);
       } else {
+        if (debugLogo && isCalComCase) {
+          console.log('🔥 [LOGO DEBUG] Skipping - missing src', {
+            elSrc: el.src,
+            bgImageUrl: bgImageUrl ? bgImageUrl.substring(0, 100) + '...' : null,
+            shouldTreatAsLogo: hasBackgroundLogo || hasLogoDataAttr || hasLogoAriaLabel || hasHomeHref || (parentLink && inHeaderNav),
+          });
+        }
         recordSkip("missing-src", el, rect);
       }
     };
@@ -1062,16 +1748,34 @@ export const getBrandingScript = () => String.raw`
       '[id*="navbar" i] a img, [id*="navbar" i] a svg, [id*="navbar" i] img, [id*="navbar" i] svg',
       '[class*="navbar" i] a img, [class*="navbar" i] a svg, [class*="navbar" i] img, [class*="navbar" i] svg',
       'a[class*="logo" i] img, a[class*="logo" i] svg',
+      'a[data-qa*="logo" i] img, a[data-qa*="logo" i] svg',
+      'a[aria-label*="logo" i] img, a[aria-label*="logo" i] svg',
       '[class*="logo" i] img, [class*="logo" i] svg',
       '[id*="logo" i] img, [id*="logo" i] svg',
       'img[class*="nav-logo" i], svg[class*="nav-logo" i]',
       'img[class*="logo" i], svg[class*="logo" i]',
+      // Top-level logos: SVGs/images in links with home href (href="/" or href="./")
+      // These are often logos even if not in header/nav
+      'a[href="/"] svg, a[href="./"] svg',
+      'a[href="/"] img, a[href="./"] img',
     ];
 
     allLogoSelectors.forEach(selector => {
       const matches = Array.from(document.querySelectorAll(selector));
       if (debugStats) {
         debugStats.selectorCounts[selector] = matches.length;
+      }
+      if (debugLogo && matches.length > 0 && (selector.includes('href="/"') || selector.includes('href="./"'))) {
+        console.log('🔥 [LOGO DEBUG] Home link selector matched:', selector, 'found', matches.length, 'elements');
+        matches.forEach((el, idx) => {
+          const parentLink = el.closest('a');
+          const href = parentLink?.getAttribute('href') || '';
+          console.log('🔥 [LOGO DEBUG] Home link element', idx + 1, ':', {
+            tag: el.tagName,
+            href,
+            rect: { width: el.getBoundingClientRect().width, height: el.getBoundingClientRect().height },
+          });
+        });
       }
       matches.forEach(el => {
         collectLogoCandidate(el, selector);
@@ -1086,6 +1790,43 @@ export const getBrandingScript = () => String.raw`
       'header [class*="logo" i] a',
       'nav a[class*="logo" i]',
       'nav [class*="logo" i] a',
+      // Check for divs and spans inside header links (common pattern for background-image logos)
+      'header a > div',
+      'header a > span',
+      'nav a > div',
+      'nav a > span',
+      '[role="banner"] a > div',
+      '[role="banner"] a > span',
+      // Check for elements with logo-related data attributes or aria-labels
+      'a[aria-label*="logo" i] > div',
+      'a[aria-label*="logo" i] > span',
+      'a[aria-label*="home" i] > div',
+      'a[aria-label*="home" i] > span',
+      'a[href="./"] > div',
+      'a[href="./"] > span',
+      'a[href="/"] > div',
+      'a[href="/"] > span',
+      'a[href="/home"] > div',
+      'a[href="/home"] > span',
+      // More specific: divs/spans with logo data attributes inside links with home indicators
+      'a[aria-label*="home" i] div[data-framer-name*="logo" i]',
+      'a[aria-label*="home" i] span[data-framer-name*="logo" i]',
+      'a[href="./"] div[data-framer-name*="logo" i]',
+      'a[href="./"] span[data-framer-name*="logo" i]',
+      'a[href="/"] div[data-framer-name*="logo" i]',
+      'a[href="/"] span[data-framer-name*="logo" i]',
+      // Also check for any div/span with logo data attribute or in logo class that has background-image
+      'div[data-framer-name*="logo" i]',
+      'span[data-framer-name*="logo" i]',
+      'div[data-name*="logo" i]',
+      'span[data-name*="logo" i]',
+      // Check for elements with logo in class name that have background-image
+      '[class*="logo" i][class*="shape" i]',
+      '[class*="logo" i][class*="icon" i]',
+      // More direct: any element with logo in class that's inside a nav/header
+      'nav [class*="logo" i]',
+      'header [class*="logo" i]',
+      '[role="banner"] [class*="logo" i]',
     ];
     
     logoContainerSelectors.forEach(selector => {
@@ -1093,10 +1834,18 @@ export const getBrandingScript = () => String.raw`
       if (debugStats) {
         debugStats.selectorCounts[selector] = matches.length;
       }
+      if (debugLogo && matches.length > 0) {
+        console.log('🔥 [LOGO DEBUG] Selector matched:', selector, 'found', matches.length, 'elements');
+      }
       matches.forEach(el => {
         const style = getComputedStyleCached(el);
         const bgImage = style.getPropertyValue('background-image');
         const bgImageUrl = extractBackgroundImageUrl(bgImage);
+        
+        // Check if element itself has logo in class name (not just parent)
+        // Handle both className (string) and getAttribute('class') for compatibility
+        const elClassName = (typeof el.className === 'string' ? el.className : el.getAttribute('class')) || '';
+        const elHasLogoClass = /logo/i.test(elClassName);
         
         if (bgImageUrl) {
           // Check if this looks like a logo (has reasonable size and is in header/logo container)
@@ -1114,11 +1863,151 @@ export const getBrandingScript = () => String.raw`
               '[class*="logo" i], [id*="logo" i], header, nav, [role="banner"]',
             ) !== null;
           
-          if (isVisible && hasReasonableSize && inLogoContext) {
-            collectLogoCandidate(el, 'background-image-logo');
+          // Additional checks for elements inside links
+          const parentLink = el.closest('a');
+          const hasLogoDataAttr = el.getAttribute('data-framer-name')?.toLowerCase().includes('logo') ||
+                                  el.getAttribute('data-name')?.toLowerCase().includes('logo');
+          const hasLogoAriaLabel = parentLink && /logo|home|brand/i.test(parentLink.getAttribute('aria-label') || '');
+          const hasHomeHref = parentLink && isHomeHref(parentLink.getAttribute('href') || '');
+          
+          // For elements with strong logo indicators (logo class, data attributes, aria-labels, home hrefs),
+          // be more lenient with size requirements - they might be small but still valid logos
+          const hasStrongLogoIndicators = elHasLogoClass || hasLogoDataAttr || hasLogoAriaLabel || hasHomeHref;
+          const sizeRequirement = hasStrongLogoIndicators 
+            ? (rect.width > 0 && rect.height > 0) // Just needs to have some size
+            : hasReasonableSize; // Otherwise require minimum size
+          
+          if (debugLogo && (elHasLogoClass || elClassName.includes('shape'))) {
+            console.log('🔥 [LOGO DEBUG] Checking element with logo class:', {
+              selector,
+              tag: el.tagName,
+              className: elClassName,
+              hasBgImage: !!bgImageUrl,
+              isVisible,
+              sizeRequirement,
+              hasReasonableSize,
+              inLogoContext,
+              hasStrongLogoIndicators,
+              rect: { width: rect.width, height: rect.height },
+            });
           }
+          
+          if (isVisible && sizeRequirement && (inLogoContext || hasStrongLogoIndicators)) {
+            collectLogoCandidate(el, 'background-image-logo');
+          } else if (debugLogo && (elHasLogoClass || elClassName.includes('shape'))) {
+            console.log('🔥 [LOGO DEBUG] Element filtered out:', {
+              isVisible,
+              sizeRequirement,
+              inLogoContext,
+              hasStrongLogoIndicators,
+            });
+          }
+        } else if (debugLogo && (elHasLogoClass || elClassName.includes('shape'))) {
+          console.log('🔥 [LOGO DEBUG] Element has no background-image:', {
+            selector,
+            tag: el.tagName,
+            className: elClassName,
+            bgImage: bgImage ? bgImage.substring(0, 100) + '...' : 'none',
+          });
         }
       });
+    });
+
+    // Additional pass: Check all divs and spans with background-image that have strong logo indicators
+    // This catches cases where the element might not match the specific selectors above
+    const allElementsWithBg = Array.from(document.querySelectorAll('div, span'));
+    if (debugLogo) {
+      console.log('🔥 [LOGO DEBUG] Checking', allElementsWithBg.length, 'total divs/spans for logo indicators');
+    }
+    
+    const allDivsWithBgImage = allElementsWithBg.filter(el => {
+      const style = getComputedStyleCached(el);
+      const bgImage = style.getPropertyValue('background-image');
+      const bgImageUrl = extractBackgroundImageUrl(bgImage);
+      
+      // Get element properties (needed for both debug and logic)
+      const dataName = el.getAttribute('data-framer-name') || el.getAttribute('data-name') || '';
+      const className = el.className || '';
+      const parentLink = el.closest('a');
+      const parentAria = parentLink?.getAttribute('aria-label') || '';
+      const parentHref = parentLink?.getAttribute('href') || '';
+      
+      // Debug logging
+      if (debugLogo) {
+        if (dataName.toLowerCase().includes('logo') || className.toLowerCase().includes('logo') || parentAria.toLowerCase().includes('home') || parentHref === './' || parentHref === '/') {
+          console.log('🔥 [LOGO DEBUG] Checking element:', {
+            tag: el.tagName,
+            hasBgImage: !!bgImage && bgImage !== 'none',
+            bgImageUrl: bgImageUrl ? bgImageUrl.substring(0, 100) + '...' : null,
+            dataName,
+            className: className.substring(0, 50),
+            parentAria,
+            parentHref,
+            rect: el.getBoundingClientRect(),
+          });
+        }
+      }
+      
+      if (!bgImageUrl) return false;
+      
+      // Check for strong logo indicators
+      const hasLogoDataAttr = el.getAttribute('data-framer-name')?.toLowerCase().includes('logo') ||
+                              el.getAttribute('data-name')?.toLowerCase().includes('logo');
+      const hasLogoClass = className.toLowerCase().includes('logo');
+      const hasLogoAriaLabel = parentLink && /logo|home|brand/i.test(parentLink.getAttribute('aria-label') || '');
+      const hasHomeHref = parentLink && isHomeHref(parentLink.getAttribute('href') || '');
+      const inHeaderNav = el.closest('header, nav, [role="banner"]') !== null;
+      
+      const shouldInclude = hasLogoDataAttr || hasLogoClass || (hasLogoAriaLabel && hasHomeHref) || (hasLogoAriaLabel && inHeaderNav) || (hasHomeHref && inHeaderNav);
+      
+      // Debug logging
+      if (debugLogo && shouldInclude) {
+        console.log('🔥 [LOGO DEBUG] Element matches logo criteria:', {
+          tag: el.tagName,
+          hasLogoDataAttr,
+          hasLogoClass,
+          hasLogoAriaLabel,
+          hasHomeHref,
+          inHeaderNav,
+          shouldInclude,
+          bgImageUrl: bgImageUrl.substring(0, 100) + '...',
+        });
+      }
+      
+      // Be more aggressive: if we have logo data attr OR logo class OR (logo aria-label AND home href), collect it
+      // Don't require header/nav context if we have strong indicators
+      return shouldInclude;
+    });
+    
+    if (debugStats) {
+      debugStats.selectorCounts["elements-with-bg-image-and-logo-indicators"] = allDivsWithBgImage.length;
+    }
+    
+    if (debugLogo) {
+      console.log('🔥 [LOGO DEBUG] Found', allDivsWithBgImage.length, 'elements with bg-image and logo indicators');
+    }
+    
+    allDivsWithBgImage.forEach(el => {
+      // Check if already collected
+      const rect = el.getBoundingClientRect();
+      const alreadyCollected = logoCandidates.some(c => {
+        return Math.abs(c.position.top - rect.top) < 1 && 
+               Math.abs(c.position.left - rect.left) < 1 &&
+               Math.abs(c.position.width - rect.width) < 1 &&
+               Math.abs(c.position.height - rect.height) < 1;
+      });
+      if (!alreadyCollected) {
+        if (debugLogo) {
+          console.log('🔥 [LOGO DEBUG] Collecting element candidate:', {
+            tag: el.tagName,
+            src: extractBackgroundImageUrl(getComputedStyleCached(el).getPropertyValue('background-image'))?.substring(0, 100) + '...',
+            rect,
+          });
+        }
+        collectLogoCandidate(el, 'background-image-logo-indicators');
+      } else if (debugLogo) {
+        console.log('🔥 [LOGO DEBUG] Skipping element - already collected');
+      }
     });
 
     const excludeSelectors = '[class*="testimonial"], [class*="client"], [class*="partner"], [class*="customer"], [class*="case-study"], [id*="testimonial"], [id*="client"], [id*="partner"], [id*="customer"], [id*="case-study"], footer, [class*="footer"]';
@@ -1243,9 +2132,36 @@ export const getBrandingScript = () => String.raw`
       return true;
     });
 
+    if (debugLogo) {
+      console.log('🔥 [LOGO DEBUG] Summary:', {
+        totalCandidates: logoCandidates.length,
+        uniqueCandidates: uniqueCandidates.length,
+        candidates: uniqueCandidates.map(c => ({
+          src: c.src.substring(0, 100) + '...',
+          source: c.source,
+          isVisible: c.isVisible,
+          indicators: c.indicators,
+        })),
+      });
+    }
+
     let candidatesToPick = uniqueCandidates.filter(c => c.isVisible);
     if (candidatesToPick.length === 0 && uniqueCandidates.length > 0) {
       candidatesToPick = uniqueCandidates;
+    }
+    
+    if (debugLogo) {
+      console.log('🔥 [LOGO DEBUG] Selection phase:', {
+        uniqueCandidates: uniqueCandidates.length,
+        visibleCandidates: candidatesToPick.length,
+        candidates: candidatesToPick.map(c => ({
+          src: c.src.substring(0, 80) + '...',
+          location: c.location,
+          isVisible: c.isVisible,
+          indicators: c.indicators,
+          position: c.position,
+        })),
+      });
     }
     
     if (candidatesToPick.length > 0) {
@@ -1292,12 +2208,33 @@ export const getBrandingScript = () => String.raw`
       }, null);
 
       if (best) {
+        if (debugLogo) {
+          console.log('🔥 [LOGO DEBUG] Selected best logo:', {
+            src: best.src.substring(0, 100) + '...',
+            isSvg: best.isSvg,
+            location: best.location,
+            indicators: best.indicators,
+            source: best.source,
+          });
+        }
         if (best.isSvg) {
           push(best.src, "logo-svg");
         } else {
           push(best.src, "logo");
         }
+      } else if (debugLogo) {
+        console.log('🔥 [LOGO DEBUG] No best logo selected from', candidatesToPick.length, 'candidates');
       }
+    } else if (debugLogo) {
+      console.log('🔥 [LOGO DEBUG] No candidates to pick from', uniqueCandidates.length, 'unique candidates');
+    }
+
+    if (debugLogo) {
+      console.log('🔥 [LOGO DEBUG] Final return:', {
+        imagesCount: imgs.length,
+        logoCandidatesCount: uniqueCandidates.length,
+        images: imgs.map(i => ({ type: i.type, src: i.src.substring(0, 80) + '...' })),
+      });
     }
 
     return { images: imgs, logoCandidates: uniqueCandidates };

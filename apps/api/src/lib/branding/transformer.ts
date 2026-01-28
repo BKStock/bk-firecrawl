@@ -163,6 +163,9 @@ export async function brandingTransformer(
       teamFlags: meta.internalOptions.teamFlags,
     });
 
+    console.log("🔥 llmEnhancement", llmEnhancement);
+    console.log("🔥 logoCandidates", logoCandidates);
+
     // Track LLM success/failure status (will be updated after all processing)
     llmButtonClassificationSucceeded =
       llmEnhancement.buttonClassification.primaryButtonReasoning !==

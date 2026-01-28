@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-// Schema for LLM output
-export const brandingEnhancementSchema = z.object({
+// Base schema without logoSelection
+const baseBrandingEnhancementSchema = z.object({
   // Button classification - LLM picks which buttons are primary/secondary
   buttonClassification: z
     .object({
@@ -98,7 +98,10 @@ export const brandingEnhancementSchema = z.object({
       "Top 5 cleaned fonts (remove obfuscation, fallbacks, generics, CSS vars)",
     )
     .default([]),
+});
 
+// Schema with logoSelection (when logo candidates are provided)
+const brandingEnhancementSchemaWithLogo = baseBrandingEnhancementSchema.extend({
   // Logo selection - LLM picks the best logo from candidates
   logoSelection: z.object({
     selectedLogoIndex: z
@@ -121,4 +124,19 @@ export const brandingEnhancementSchema = z.object({
   }),
 });
 
-export type BrandingEnhancement = z.infer<typeof brandingEnhancementSchema>;
+// Export function to get the appropriate schema based on whether logo candidates exist
+export function getBrandingEnhancementSchema(hasLogoCandidates: boolean) {
+  return hasLogoCandidates
+    ? brandingEnhancementSchemaWithLogo
+    : baseBrandingEnhancementSchema;
+}
+
+// Type - logoSelection is optional in the type even though it's required in schema when candidates exist
+export type BrandingEnhancement = Omit<
+  z.infer<typeof brandingEnhancementSchemaWithLogo>,
+  "logoSelection"
+> & {
+  logoSelection?: z.infer<
+    typeof brandingEnhancementSchemaWithLogo
+  >["logoSelection"];
+};
