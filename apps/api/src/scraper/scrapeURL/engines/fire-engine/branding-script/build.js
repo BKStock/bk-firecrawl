@@ -5,6 +5,7 @@ const path = require("path");
 
 const entryPoint = path.join(__dirname, "index.ts");
 const outFile = path.join(__dirname, "bundle.generated.ts");
+const pasteableFile = path.join(__dirname, "branding-script.pasteable.js");
 
 async function build() {
   try {
@@ -42,6 +43,18 @@ export const BRANDING_SCRIPT = \`${escaped}\`;
 
     fs.writeFileSync(outFile, tsContent, "utf-8");
     console.log(`Branding script built successfully: ${outFile}`);
+
+    // Pasteable file: only in dev mode (raw script for pasting in browser console)
+    const isDev = process.env.NODE_ENV === "development";
+    if (isDev) {
+      const pasteableHeader = `// Paste this entire file into the browser console to run the branding script.
+// AUTO-GENERATED - run \`pnpm build:branding\` with NODE_ENV=development to regenerate.
+
+`;
+      fs.writeFileSync(pasteableFile, pasteableHeader + scriptContent, "utf-8");
+      console.log(`Pasteable script written: ${pasteableFile}`);
+    }
+
     console.log(`Size: ${(scriptContent.length / 1024).toFixed(2)} KB`);
   } catch (error) {
     console.error("Build failed:", error);

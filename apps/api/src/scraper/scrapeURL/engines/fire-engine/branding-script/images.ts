@@ -280,13 +280,28 @@ export const findImages = (): FindImagesResult => {
           .querySelector('meta[name="twitter:image"]')
           ?.getAttribute("content") || "";
 
-      if (
+      const matchesOgOrTwitter =
         (ogImageSrc && imgSrc.includes(ogImageSrc)) ||
         (twitterImageSrc && imgSrc.includes(twitterImageSrc)) ||
         (ogImageSrc && ogImageSrc.includes(imgSrc)) ||
-        (twitterImageSrc && twitterImageSrc.includes(imgSrc))
-      ) {
-        return;
+        (twitterImageSrc && twitterImageSrc.includes(imgSrc));
+
+      if (matchesOgOrTwitter) {
+        // Don't skip header/nav logos that are also og:image (many sites use logo as og:image)
+        const headerNavSelector =
+          'header, nav, [role="banner"], #navbar, [id*="navbar" i], #taskbar, [id*="taskbar" i], [role="menubar"]';
+        const inHeaderOrNav = el.closest(headerNavSelector) !== null;
+        const hasStrongLogoContext =
+          (inHeaderOrNav && hasHomeHref) ||
+          (inHeaderOrNav && /logo/i.test(imgSrc)) ||
+          (inHeaderOrNav &&
+            el.closest('[class*="logo" i], [id*="logo" i]') !== null) ||
+          /logo/i.test(
+            (el.getAttribute("class") || "") + (el.getAttribute("alt") || ""),
+          );
+        if (!hasStrongLogoContext) {
+          return;
+        }
       }
     }
 
@@ -875,6 +890,7 @@ export const findImages = (): FindImagesResult => {
 
   const allLogoSelectors = [
     "header a img, header a svg, header img, header svg",
+    "[class*='theme-site-logo' i] img, [class*='elementor-widget-theme-site-logo' i] img",
     "header a > svg, nav a > svg",
     '[class*="header" i] a img, [class*="header" i] a svg, [class*="header" i] img, [class*="header" i] svg',
     '[id*="header" i] a img, [id*="header" i] a svg, [id*="header" i] img, [id*="header" i] svg',

@@ -15,3 +15,6 @@ dump.rdb
 firecrawl.log
 
 test-results/
+
+# Branding script pasteable file (dev-only build artifact)
+branding-script.pasteable.js
