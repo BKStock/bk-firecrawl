@@ -1,7 +1,7 @@
 import { logger } from "../logger";
 import { calculateLogoArea } from "./types";
 
-interface LogoCandidate {
+export interface LogoCandidate {
   src: string;
   alt: string;
   isSvg: boolean;
@@ -36,7 +36,6 @@ const CONFIDENCE_THRESHOLDS = {
   GOOD_CONFIDENCE: 0.75,
   MODERATE_CONFIDENCE: 0.6,
   WEAK_CONFIDENCE: 0.4,
-  LLM_THRESHOLD: 0.85,
 } as const;
 
 /**
@@ -179,8 +178,7 @@ function detectRepeatedLogos(candidates: LogoCandidate[]): Set<number> {
 
   candidates.forEach((candidate, index) => {
     const srcKey =
-      candidate.src.split("?")[0].split("/").pop()?.toLowerCase() ||
-      candidate.src;
+      extractFilename(candidate.src)?.toLowerCase() || candidate.src;
     if (!srcGroups.has(srcKey)) {
       srcGroups.set(srcKey, []);
     }
@@ -374,11 +372,6 @@ export function selectLogoWithConfidence(
     if (candidate.location === "body" && !candidate.indicators.inHeader) {
       score -= 10;
       reasons.push("body location without header (penalty)");
-    }
-
-    if (!candidate.isVisible) {
-      score -= 10;
-      reasons.push("not visible (penalty)");
     }
 
     return {

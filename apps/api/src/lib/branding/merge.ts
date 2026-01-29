@@ -1,28 +1,14 @@
 import { BrandingProfile } from "../../types/branding";
+import { LogoCandidate } from "./logo-selector";
 import { BrandingEnhancement } from "./schema";
 import { ButtonSnapshot, calculateLogoArea } from "./types";
+import { logger } from "../logger";
 
 export function mergeBrandingResults(
   js: BrandingProfile,
   llm: BrandingEnhancement,
   buttonSnapshots: ButtonSnapshot[],
-  logoCandidates?: Array<{
-    src: string;
-    alt: string;
-    isSvg: boolean;
-    isVisible: boolean;
-    location: "header" | "body" | "footer";
-    position: { top: number; left: number; width: number; height: number };
-    indicators: {
-      inHeader: boolean;
-      altMatch: boolean;
-      srcMatch: boolean;
-      classMatch: boolean;
-      hrefMatch: boolean;
-    };
-    href?: string;
-    source: string;
-  }>,
+  logoCandidates?: LogoCandidate[],
 ): BrandingProfile {
   const merged: BrandingProfile = { ...js };
 
@@ -166,7 +152,7 @@ export function mergeBrandingResults(
             confidence: llm.logoSelection.confidence,
             source: isHeuristicOrFallback ? "heuristic" : "llm",
           };
-          console.log("[branding merge] Logo INCLUDED", {
+          logger.debug("[branding merge] Logo included", {
             result: "included",
             selectedIndex: llm.logoSelection.selectedLogoIndex,
             source: isHeuristicOrFallback ? "heuristic" : "llm",
@@ -195,7 +181,7 @@ export function mergeBrandingResults(
             rejected: true,
             source: isHeuristicOrFallback ? "heuristic" : "llm",
           };
-          console.log("[branding merge] Logo REJECTED (override)", {
+          logger.debug("[branding merge] Logo rejected (override)", {
             result: "rejected",
             selectedIndex: llm.logoSelection.selectedLogoIndex,
             source: isHeuristicOrFallback ? "heuristic" : "llm",
