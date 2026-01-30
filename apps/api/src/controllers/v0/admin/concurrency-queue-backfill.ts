@@ -67,7 +67,35 @@ export async function concurrencyQueueBackfillController(
       logger,
     );
 
+    // Get concurrency limits for both job types
+    const maxCrawlConcurrency =
+      (await getACUCTeam(ownerId, false, true, RateLimiterMode.Crawl))
+        ?.concurrency ?? 2;
+    const maxExtractConcurrency =
+      (await getACUCTeam(ownerId, false, true, RateLimiterMode.Extract))
+        ?.concurrency ?? 2;
+
+    const currentActiveConcurrency = (
+      await getConcurrencyLimitActiveJobs(ownerId)
+    ).length;
+
+    const jobsToStart: typeof jobsToAdd = [];
+    const jobsToQueue: typeof jobsToAdd = [];
+
+    let activeCount = currentActiveConcurrency;
     for (const job of jobsToAdd) {
+      const isExtract = "is_extract" in job.data && job.data.is_extract;
+      const limit = isExtract ? maxExtractConcurrency : maxCrawlConcurrency;
+
+      if (activeCount < limit) {
+        jobsToStart.push(job);
+        activeCount++;
+      } else {
+        jobsToQueue.push(job);
+      }
+    }
+
+    for (const job of jobsToQueue) {
       await pushConcurrencyLimitedJob(
         ownerId,
         {
@@ -80,39 +108,21 @@ export async function concurrencyQueueBackfillController(
       );
     }
 
-    // start jobs up to the concurrency limit
-    const maxTeamConcurrency =
-      (await getACUCTeam(ownerId, false, true, RateLimiterMode.Crawl))
-        ?.concurrency ?? 2;
-
-    const currentActiveConcurrency = (
-      await getConcurrencyLimitActiveJobs(ownerId)
-    ).length;
-
-    const availableSlots = Math.max(
-      0,
-      maxTeamConcurrency - currentActiveConcurrency,
-    );
-
-    if (availableSlots > 0 && jobsToAdd.length > 0) {
-      const jobsToStart = jobsToAdd.slice(0, availableSlots);
-
-      for (const job of jobsToStart) {
-        await scrapeQueue.promoteJobFromBacklogOrAdd(job.id, job.data, {
-          priority: job.priority,
-          listenable: job.listenChannelId !== undefined,
-          ownerId: job.data.team_id ?? undefined,
-          groupId: job.data.crawl_id ?? undefined,
-        });
-
-        await pushConcurrencyLimitActiveJob(ownerId, job.id, 60 * 1000);
-      }
-
-      logger.info("Started jobs for team", {
-        teamId: ownerId,
-        startedCount: jobsToStart.length,
+    for (const job of jobsToStart) {
+      await scrapeQueue.promoteJobFromBacklogOrAdd(job.id, job.data, {
+        priority: job.priority,
+        listenable: job.listenChannelId !== undefined,
+        ownerId: job.data.team_id ?? undefined,
+        groupId: job.data.crawl_id ?? undefined,
       });
+
+      await pushConcurrencyLimitActiveJob(ownerId, job.id, 60 * 1000);
     }
+
+    logger.info("Started jobs for team", {
+      teamId: ownerId,
+      startedCount: jobsToStart.length,
+    });
 
     logger.info("Finished backfilling concurrency queue for team", {
       teamId: ownerId,
