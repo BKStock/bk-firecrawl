@@ -5,6 +5,7 @@ import {
   type Network,
 } from "@x402/express";
 import { registerExactEvmScheme } from "@x402/evm/exact/server";
+import type { Request, Response, NextFunction } from "express";
 
 // Network name to CAIP-2 chain ID mapping
 const NETWORK_TO_CAIP2: Record<string, Network> = {
@@ -35,12 +36,32 @@ export function getX402ResourceServer(): X402ResourceServer {
   return _resourceServer;
 }
 
-// Get the pay-to address
+// Sentinel address used when X402_PAY_TO_ADDRESS is not configured.
+// This address is checked at runtime by x402ConfigMiddleware to prevent payments from being burned.
+const X402_UNCONFIGURED_SENTINEL =
+  "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" as const;
+
+// Get the pay-to address (returns sentinel if not configured - validated at runtime by middleware)
 function getX402PayToAddress(): `0x${string}` {
   return (
-    (config.X402_PAY_TO_ADDRESS as `0x${string}`) ||
-    "0x0000000000000000000000000000000000000000"
+    (config.X402_PAY_TO_ADDRESS as `0x${string}`) || X402_UNCONFIGURED_SENTINEL
   );
+}
+
+// Middleware to validate x402 configuration at request time
+export function x402ConfigMiddleware(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!config.X402_PAY_TO_ADDRESS) {
+    return res.status(503).json({
+      success: false,
+      error:
+        "X402 payments are not configured on this server. X402_PAY_TO_ADDRESS environment variable is required.",
+    });
+  }
+  next();
 }
 
 // Helper to create route config for x402 endpoints

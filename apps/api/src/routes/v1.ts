@@ -41,6 +41,7 @@ import {
   paymentMiddleware,
   getX402ResourceServer,
   createX402RouteConfig,
+  x402ConfigMiddleware,
 } from "../lib/x402";
 
 expressWs(express());
@@ -314,6 +315,7 @@ v1Router.post(
   "/x402/search",
   authMiddleware(RateLimiterMode.Search),
   countryCheck,
+  x402ConfigMiddleware,
   paymentMiddleware(
     createX402RouteConfig(
       "POST /x402/search",

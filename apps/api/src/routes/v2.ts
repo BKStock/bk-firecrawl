@@ -38,6 +38,7 @@ import {
   paymentMiddleware,
   getX402ResourceServer,
   createX402RouteConfig,
+  x402ConfigMiddleware,
 } from "../lib/x402";
 import { agentController } from "../controllers/v2/agent";
 import { agentStatusController } from "../controllers/v2/agent-status";
@@ -369,6 +370,7 @@ v2Router.post(
   authMiddleware(RateLimiterMode.Search),
   countryCheck,
   blocklistMiddleware,
+  x402ConfigMiddleware,
   paymentMiddleware(
     createX402RouteConfig(
       "POST /x402/search",
