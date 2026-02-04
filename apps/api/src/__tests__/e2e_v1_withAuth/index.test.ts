@@ -40,7 +40,7 @@ describe("E2E Tests for v1 API Routes", () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it.concurrent("should throw error for blocklisted URL", async () => {
+    it.concurrent("should throw error for unsupported URL", async () => {
       const scrapeRequest: ScrapeRequestInput = {
         url: "https://facebook.com/fake-test",
       };
@@ -736,7 +736,7 @@ describe("E2E Tests for v1 API Routes", () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it.concurrent("should throw error for blocklisted URL", async () => {
+    it.concurrent("should throw error for unsupported URL", async () => {
       const scrapeRequest: ScrapeRequestInput = {
         url: "https://facebook.com/fake-test",
       };

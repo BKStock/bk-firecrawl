@@ -52,12 +52,12 @@ describe("E2E Tests for API Routes with No Authentication", () => {
       expect(response.statusCode).not.toBe(401);
     });
 
-    it("should return an error for a blocklisted URL without requiring authorization", async () => {
-      const blocklistedUrl = "https://facebook.com/fake-test";
+    it("should return an error for a unsupported URL without requiring authorization", async () => {
+      const unsupportedUrl = "https://facebook.com/fake-test";
       const response = await request(TEST_URL)
         .post("/v0/scrape")
         .set("Content-Type", "application/json")
-        .send({ url: blocklistedUrl });
+        .send({ url: unsupportedUrl });
       expect(response.statusCode).toBe(403);
       expect(response.body.error).toContain(UNSUPPORTED_SITE_MESSAGE);
     });
@@ -77,12 +77,12 @@ describe("E2E Tests for API Routes with No Authentication", () => {
       expect(response.statusCode).not.toBe(401);
     });
 
-    it("should return an error for a blocklisted URL", async () => {
-      const blocklistedUrl = "https://twitter.com/fake-test";
+    it("should return an error for a unsupported URL", async () => {
+      const unsupportedUrl = "https://twitter.com/fake-test";
       const response = await request(TEST_URL)
         .post("/v0/crawl")
         .set("Content-Type", "application/json")
-        .send({ url: blocklistedUrl });
+        .send({ url: unsupportedUrl });
       expect(response.statusCode).toBe(403);
       expect(response.body.error).toContain(UNSUPPORTED_SITE_MESSAGE);
     });
@@ -106,12 +106,12 @@ describe("E2E Tests for API Routes with No Authentication", () => {
       expect(response.statusCode).not.toBe(401);
     });
 
-    it("should return an error for a blocklisted URL", async () => {
-      const blocklistedUrl = "https://instagram.com/fake-test";
+    it("should return an error for a unsupported URL", async () => {
+      const unsupportedUrl = "https://instagram.com/fake-test";
       const response = await request(TEST_URL)
         .post("/v0/crawlWebsitePreview")
         .set("Content-Type", "application/json")
-        .send({ url: blocklistedUrl });
+        .send({ url: unsupportedUrl });
       expect(response.statusCode).toBe(403);
       expect(response.body.error).toContain(UNSUPPORTED_SITE_MESSAGE);
     });
