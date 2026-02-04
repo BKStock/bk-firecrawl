@@ -36,7 +36,7 @@ describe('FirecrawlApp E2E Tests', () => {
   test.concurrent('should throw error for blocklisted URL on scrape', async () => {
     const app = new FirecrawlApp({ apiKey: TEST_API_KEY, apiUrl: API_URL });
     const blocklistedUrl = "https://facebook.com/fake-test";
-    await expect(app.scrapeUrl(blocklistedUrl)).rejects.toThrow("This website is not currently supported");
+    await expect(app.scrapeUrl(blocklistedUrl)).rejects.toThrow("do not support this site");
   });
 
   test.concurrent('should return successful response for valid scrape', async () => {
