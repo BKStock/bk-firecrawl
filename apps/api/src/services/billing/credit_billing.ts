@@ -147,17 +147,16 @@ async function supaCheckTeamCredits(
   }
 
   // Graceful billing only applies if the plan supports it AND auto-recharge is enabled
-  const effectiveGraceful =
-    chunk.price_should_be_graceful && isAutoRechargeEnabled;
+  const allowOverages = chunk.price_should_be_graceful && isAutoRechargeEnabled;
 
-  const remainingCredits = effectiveGraceful
+  const remainingCredits = allowOverages
     ? chunk.remaining_credits + chunk.price_credits
     : chunk.remaining_credits;
 
   const creditsWillBeUsed = chunk.adjusted_credits_used + credits;
 
   // In case chunk.price_credits is undefined, set it to a large number to avoid mistakes
-  const totalPriceCredits = effectiveGraceful
+  const totalPriceCredits = allowOverages
     ? (chunk.total_credits_sum ?? 100000000) + chunk.price_credits
     : (chunk.total_credits_sum ?? 100000000);
 
@@ -183,12 +182,12 @@ async function supaCheckTeamCredits(
       return {
         success: true,
         message: autoChargeResult.message,
-        remainingCredits: effectiveGraceful
+        remainingCredits: allowOverages
           ? autoChargeResult.remainingCredits + chunk.price_credits
           : autoChargeResult.remainingCredits,
         chunk: autoChargeResult.chunk,
       };
-    } else if (effectiveGraceful) {
+    } else if (allowOverages) {
       return {
         success: true,
         message: "Auto-recharge failed, but price should be graceful",
@@ -227,7 +226,7 @@ async function supaCheckTeamCredits(
       is_extract: chunk.is_extract,
       bypassCreditChecks: chunk.flags?.bypassCreditChecks,
       price_should_be_graceful: chunk.price_should_be_graceful,
-      effectiveGraceful,
+      allowOverages,
       price_credits: chunk.price_credits,
       coupon_credits: chunk.coupon_credits,
       total_credits_sum: chunk.total_credits_sum,
