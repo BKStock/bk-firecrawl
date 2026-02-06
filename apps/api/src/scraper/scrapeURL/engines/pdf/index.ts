@@ -6,7 +6,7 @@ import { robustFetch } from "../../lib/fetch";
 import { z } from "zod";
 import * as Sentry from "@sentry/node";
 import escapeHtml from "escape-html";
-import PdfParse from "pdf-parse";
+import { PDFParse } from "pdf-parse";
 import { downloadFile, fetchFileToBuffer } from "../utils/downloadFile";
 import {
   PDFAntibotError,
@@ -240,13 +240,18 @@ async function scrapePDFWithParsePDF(
 ): Promise<PDFProcessorResult> {
   meta.logger.debug("Processing PDF document with parse-pdf", { tempFilePath });
 
-  const result = await PdfParse(await readFile(tempFilePath));
-  const escaped = escapeHtml(result.text);
+  const parser = new PDFParse({ data: await readFile(tempFilePath) });
+  try {
+    const result = await parser.getText();
+    const escaped = escapeHtml(result.text);
 
-  return {
-    markdown: escaped,
-    html: escaped,
-  };
+    return {
+      markdown: escaped,
+      html: escaped,
+    };
+  } finally {
+    await parser.destroy();
+  }
 }
 
 export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
