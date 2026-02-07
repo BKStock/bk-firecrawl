@@ -27,7 +27,11 @@ import {
   shouldParsePDF,
   getPDFMaxPages,
 } from "../../../../controllers/v2/types";
-import { getPdfMetadata } from "@mendable/firecrawl-rs";
+import {
+  getPdfMetadata,
+  detectPdfType,
+  extractPdfToMarkdown,
+} from "@mendable/firecrawl-rs";
 
 type PDFProcessorResult = { html: string; markdown?: string };
 
@@ -249,7 +253,32 @@ async function scrapePDFWithParsePDF(
   };
 }
 
+async function scrapePDFWithLocalExtraction(
+  meta: Meta,
+  tempFilePath: string,
+): Promise<PDFProcessorResult> {
+  meta.logger.debug("Processing PDF document with local Rust extraction", {
+    tempFilePath,
+  });
+
+  const result = extractPdfToMarkdown(tempFilePath);
+
+  meta.logger.debug("Local Rust extraction completed", {
+    tempFilePath,
+    markdownLength: result.markdown.length,
+    pageCount: result.pageCount,
+  });
+
+  const html = await marked.parse(result.markdown, { async: true });
+
+  return {
+    markdown: result.markdown,
+    html,
+  };
+}
+
 export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
+  console.log("🔥 Scraping PDF", meta.options.parsers);
   const shouldParse = shouldParsePDF(meta.options.parsers);
   const maxPages = getPDFMaxPages(meta.options.parsers);
 
@@ -305,6 +334,7 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
     }
   }
 
+  const startDownload = Date.now();
   const { response, tempFilePath } =
     meta.pdfPrefetch !== undefined && meta.pdfPrefetch !== null
       ? { response: meta.pdfPrefetch, tempFilePath: meta.pdfPrefetch.filePath }
@@ -317,6 +347,7 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
             signal: meta.abort.asSignal(),
           },
         );
+  console.log("🔥 Download duration", Date.now() - startDownload);
 
   try {
     if ((response as any).headers) {
@@ -338,7 +369,10 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
       }
     }
 
+    const startMetadata = Date.now();
     const pdfMetadata = await getPdfMetadata(tempFilePath);
+    console.log("🔥 PDF metadata duration", Date.now() - startMetadata);
+
     const effectivePageCount = maxPages
       ? Math.min(pdfMetadata.numPages, maxPages)
       : pdfMetadata.numPages;
@@ -355,62 +389,171 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
 
     let result: PDFProcessorResult | null = null;
 
-    const base64Content = (await readFile(tempFilePath)).toString("base64");
+    const start = Date.now();
 
-    // First try RunPod MU if conditions are met
-    if (
-      base64Content.length < MAX_FILE_SIZE &&
-      config.RUNPOD_MU_API_KEY &&
-      config.RUNPOD_MU_POD_ID
-    ) {
-      const muV1StartedAt = Date.now();
+    // Detect PDF type to determine processing strategy
+    const pdfTypeResult = detectPdfType(tempFilePath);
+    const pdfDetectionData = {
+      pdfType: pdfTypeResult.pdfType,
+      confidence: pdfTypeResult.confidence,
+      pagesWithText: pdfTypeResult.pagesWithText,
+      pagesSampled: pdfTypeResult.pagesSampled,
+      pageCount: pdfTypeResult.pageCount,
+      url: meta.rewrittenUrl ?? meta.url,
+    };
+
+    const duration = Date.now() - start;
+    console.log("🔥 PDF type detection duration", duration);
+
+    meta.logger
+      .child({ method: "scrapePDF/detectPdfType" })
+      .info("PDF type detection completed", pdfDetectionData);
+
+    // Track which extraction method will be used
+    const useLocalExtraction =
+      pdfTypeResult.pdfType === "text" && pdfTypeResult.confidence >= 0.8;
+    let extractionMethod: "local" | "runpod-mu" | "pdf-parse" =
+      useLocalExtraction ? "local" : "runpod-mu";
+
+    // For text-based PDFs, use fast local extraction (no GPU needed)
+    if (useLocalExtraction) {
+      const localStartedAt = Date.now();
       try {
-        result = await scrapePDFWithRunPodMU(
+        result = await scrapePDFWithLocalExtraction(
           {
             ...meta,
             logger: meta.logger.child({
-              method: "scrapePDF/scrapePDFWithRunPodMU",
+              method: "scrapePDF/scrapePDFWithLocalExtraction",
             }),
           },
           tempFilePath,
-          base64Content,
-          maxPages,
         );
-        const muV1DurationMs = Date.now() - muV1StartedAt;
+        const localDurationMs = Date.now() - localStartedAt;
+        const duration = Date.now() - start;
+        console.log("🔥 Local PDF extraction duration", duration);
         meta.logger
-          .child({ method: "scrapePDF/MUv1Experiment" })
-          .info("MU v1 completed", {
-            durationMs: muV1DurationMs,
+          .child({ method: "scrapePDF/scrapePDFWithLocalExtraction" })
+          .info("Local PDF extraction completed", {
+            durationMs: localDurationMs,
             url: meta.rewrittenUrl ?? meta.url,
             pages: effectivePageCount,
-            success: true,
+            pdfType: pdfTypeResult.pdfType,
+            confidence: pdfTypeResult.confidence,
+            markdownLength: result.markdown?.length ?? 0,
           });
       } catch (error) {
-        if (
-          error instanceof RemoveFeatureError ||
-          error instanceof AbortManagerThrownError
-        ) {
-          throw error;
-        }
-        meta.logger.warn(
-          "RunPod MU failed to parse PDF (could be due to timeout) -- falling back to parse-pdf",
-          { error },
-        );
-        Sentry.captureException(error);
-        const muV1DurationMs = Date.now() - muV1StartedAt;
+        const localDurationMs = Date.now() - localStartedAt;
+        extractionMethod = "runpod-mu"; // Will fall back
+
         meta.logger
-          .child({ method: "scrapePDF/MUv1Experiment" })
-          .info("MU v1 failed", {
-            durationMs: muV1DurationMs,
+          .child({ method: "scrapePDF/scrapePDFWithLocalExtraction" })
+          .warn("Local PDF extraction failed -- falling back to RunPod MU", {
+            error,
+            durationMs: localDurationMs,
             url: meta.rewrittenUrl ?? meta.url,
-            pages: effectivePageCount,
-            success: false,
+            pdfType: pdfTypeResult.pdfType,
+            confidence: pdfTypeResult.confidence,
           });
+
+        // Capture to Sentry for monitoring local extraction failures
+        Sentry.captureException(error, {
+          tags: {
+            pdfExtractionMethod: "local",
+            pdfType: pdfTypeResult.pdfType,
+          },
+          extra: {
+            url: meta.rewrittenUrl ?? meta.url,
+            confidence: pdfTypeResult.confidence,
+            pageCount: effectivePageCount,
+          },
+        });
+        // result stays null, will fall through to RunPod MU
+      }
+    }
+
+    // Try RunPod MU for scanned/image/mixed PDFs or if local extraction failed
+    if (!result && config.RUNPOD_MU_API_KEY && config.RUNPOD_MU_POD_ID) {
+      // Only read and encode file when we actually need MinerU
+      const base64Content = (await readFile(tempFilePath)).toString("base64");
+
+      if (base64Content.length >= MAX_FILE_SIZE) {
+        meta.logger.warn(
+          "PDF too large for RunPod MU, falling back to pdf-parse",
+          {
+            size: base64Content.length,
+            maxSize: MAX_FILE_SIZE,
+          },
+        );
+      } else {
+        const muV1StartedAt = Date.now();
+        try {
+          result = await scrapePDFWithRunPodMU(
+            {
+              ...meta,
+              logger: meta.logger.child({
+                method: "scrapePDF/scrapePDFWithRunPodMU",
+              }),
+            },
+            tempFilePath,
+            base64Content,
+            maxPages,
+          );
+          const muV1DurationMs = Date.now() - muV1StartedAt;
+          meta.logger
+            .child({ method: "scrapePDF/scrapePDFWithRunPodMU" })
+            .info("RunPod MU extraction completed", {
+              durationMs: muV1DurationMs,
+              url: meta.rewrittenUrl ?? meta.url,
+              pages: effectivePageCount,
+              pdfType: pdfTypeResult.pdfType,
+              markdownLength: result.markdown?.length ?? 0,
+            });
+        } catch (error) {
+          if (
+            error instanceof RemoveFeatureError ||
+            error instanceof AbortManagerThrownError
+          ) {
+            throw error;
+          }
+          extractionMethod = "pdf-parse"; // Will fall back
+          const muV1DurationMs = Date.now() - muV1StartedAt;
+
+          meta.logger
+            .child({ method: "scrapePDF/scrapePDFWithRunPodMU" })
+            .warn("RunPod MU failed -- falling back to pdf-parse", {
+              error,
+              durationMs: muV1DurationMs,
+              url: meta.rewrittenUrl ?? meta.url,
+              pdfType: pdfTypeResult.pdfType,
+            });
+
+          Sentry.captureException(error, {
+            tags: {
+              pdfExtractionMethod: "runpod-mu",
+              pdfType: pdfTypeResult.pdfType,
+            },
+            extra: {
+              url: meta.rewrittenUrl ?? meta.url,
+              pageCount: effectivePageCount,
+            },
+          });
+
+          meta.logger
+            .child({ method: "scrapePDF/MUv1Experiment" })
+            .info("MU v1 failed", {
+              durationMs: muV1DurationMs,
+              url: meta.rewrittenUrl ?? meta.url,
+              pages: effectivePageCount,
+              success: false,
+            });
+        }
       }
     }
 
     // If RunPod MU failed or wasn't attempted, use PdfParse
     if (!result) {
+      extractionMethod = "pdf-parse";
+
       result = await scrapePDFWithParsePDF(
         {
           ...meta,
@@ -420,7 +563,28 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
         },
         tempFilePath,
       );
+
+      meta.logger
+        .child({ method: "scrapePDF/scrapePDFWithParsePDF" })
+        .info("pdf-parse extraction completed", {
+          url: meta.rewrittenUrl ?? meta.url,
+          pages: effectivePageCount,
+          pdfType: pdfTypeResult.pdfType,
+          markdownLength: result.markdown?.length ?? 0,
+        });
     }
+
+    // Final summary log for monitoring and analytics
+    meta.logger
+      .child({ method: "scrapePDF" })
+      .info("PDF processing completed", {
+        url: meta.rewrittenUrl ?? meta.url,
+        extractionMethod,
+        pdfType: pdfTypeResult.pdfType,
+        confidence: pdfTypeResult.confidence,
+        pages: effectivePageCount,
+        markdownLength: result?.markdown?.length ?? 0,
+      });
 
     return {
       url: response.url ?? meta.rewrittenUrl ?? meta.url,
