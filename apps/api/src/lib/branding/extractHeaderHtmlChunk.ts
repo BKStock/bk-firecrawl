@@ -26,6 +26,10 @@ function stripNoise(html: string): string {
     /<([\w:-]+)\b[^>]+style\s*=\s*"[^"]*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^"]*"[^>]*>[\s\S]*?<\/\1>/gi,
     "",
   );
+  out = out.replace(
+    /<([\w:-]+)\b[^>]+style\s*=\s*'[^']*(?:display\s*:\s*none|visibility\s*:\s*hidden)[^']*'[^>]*>[\s\S]*?<\/\1>/gi,
+    "",
+  );
   // Strip data-* attributes
   out = out.replace(/\s+data-[\w-]+="[^"]*"/gi, "");
   out = out.replace(/\s+data-[\w-]+='[^']*'/gi, "");
