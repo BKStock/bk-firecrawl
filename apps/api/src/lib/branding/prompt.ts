@@ -11,6 +11,7 @@ function sanitizeForPrompt(
     .replace(/[\r\n]+/g, " ") // flatten newlines
     .replace(/[\x00-\x1f\x7f]/g, "") // strip control chars
     .replace(/"/g, '\\"') // escape quotes for use in quoted prompt fields
+    .replace(/`/g, "") // strip backticks to prevent closing markdown code fences
     .trim()
     .substring(0, maxLen);
 }
