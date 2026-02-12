@@ -78,7 +78,7 @@ async function supaCheckTeamCredits(
     throw new Error("NULL ACUC passed to supaCheckTeamCredits");
   }
 
-  // If bypassCreditChecks flag is set (via team or org flags from ACUC), return success with infinite credits (infinitely graceful)
+  // If bypassCreditChecks flag is set, return success with infinite credits (infinitely graceful)
   if (chunk.flags?.bypassCreditChecks) {
     return {
       success: true,
