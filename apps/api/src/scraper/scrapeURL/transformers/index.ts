@@ -164,36 +164,43 @@ async function deriveLinksFromHTML(
       meta.url,
   );
 
-  if (
-    !!meta.internalOptions.teamId &&
-    !meta.internalOptions.teamId?.includes("robots-txt") &&
-    !meta.internalOptions.teamId?.includes("sitemap")
-  ) {
-    // for now, only precrawl team has this enabled
-    if (meta.internalOptions.teamId === config.PRECRAWL_TEAM_ID) {
-      let linksDeduped: Set<string> = new Set();
-      if (!!document.links) {
-        linksDeduped = new Set([...document.links]);
-      }
+  try {
+    if (
+      !!meta.internalOptions.teamId &&
+      !meta.internalOptions.teamId?.includes("robots-txt") &&
+      !meta.internalOptions.teamId?.includes("sitemap")
+    ) {
+      // for now, only precrawl team has this enabled
+      if (meta.internalOptions.teamId === config.PRECRAWL_TEAM_ID) {
+        let linksDeduped: Set<string> = new Set();
+        if (!!document.links) {
+          linksDeduped = new Set([...document.links]);
+        }
 
-      indexerQueue
-        .sendToWorker({
-          id: meta.id,
-          type: "links",
-          discovery_url:
-            document.metadata.url ??
-            document.metadata.sourceURL ??
-            meta.rewrittenUrl ??
-            meta.url,
-          urls: [...linksDeduped],
-        })
-        .catch(error => {
-          meta.logger.error("Failed to queue links for indexing", {
-            error: (error as Error)?.message,
-            url: meta.url,
+        indexerQueue
+          .sendToWorker({
+            id: meta.id,
+            type: "links",
+            discovery_url:
+              document.metadata.url ??
+              document.metadata.sourceURL ??
+              meta.rewrittenUrl ??
+              meta.url,
+            urls: [...linksDeduped],
+          })
+          .catch(error => {
+            meta.logger.error("Failed to queue links for indexing", {
+              error: (error as Error)?.message,
+              url: meta.url,
+            });
           });
-        });
+      }
     }
+  } catch (error) {
+    meta.logger.error("Failed to queue links for indexing", {
+      error: (error as Error)?.message,
+      url: meta.url,
+    });
   }
 
   if (!hasFormatOfType(meta.options.formats, "links")) {
