@@ -474,27 +474,6 @@ export async function mapController(
     );
   });
 
-  // Log the job
-  logMap({
-    id: result.job_id,
-    request_id: result.job_id,
-    url: req.body.url,
-    team_id: req.auth.team_id,
-    options: {
-      search: req.body.search,
-      limit: req.body.limit,
-      ignoreSitemap: req.body.ignoreSitemap,
-      includeSubdomains: req.body.includeSubdomains,
-      filterByPath: req.body.filterByPath !== false,
-      useIndex: req.body.useIndex,
-      timeout: req.body.timeout,
-      location: req.body.location,
-    },
-    results: result.links,
-    credits_cost: 1,
-    zeroDataRetention: false, // not supported
-  });
-
   // Log final timing information
   const totalRequestTime = new Date().getTime() - middlewareStartTime;
   const controllerTime = new Date().getTime() - controllerStartTime;
@@ -517,5 +496,31 @@ export async function mapController(
     scrape_id: result.scrape_id,
   };
 
-  return res.status(200).json(response);
+  res.status(200).json(response);
+
+  // Log the job after response is sent to avoid blocking the client
+  await logMap({
+    id: result.job_id,
+    request_id: result.job_id,
+    url: req.body.url,
+    team_id: req.auth.team_id,
+    options: {
+      search: req.body.search,
+      limit: req.body.limit,
+      ignoreSitemap: req.body.ignoreSitemap,
+      includeSubdomains: req.body.includeSubdomains,
+      filterByPath: req.body.filterByPath !== false,
+      useIndex: req.body.useIndex,
+      timeout: req.body.timeout,
+      location: req.body.location,
+    },
+    results: result.links,
+    credits_cost: 1,
+    zeroDataRetention: false, // not supported
+  }).catch(err =>
+    logger.error("Failed to log map to GCS", {
+      error: err,
+      jobId: result.job_id,
+    }),
+  );
 }

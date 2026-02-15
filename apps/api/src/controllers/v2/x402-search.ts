@@ -513,7 +513,15 @@ export async function x402SearchController(
           scrapeIds,
         });
 
-        logSearch(
+        res.status(200).json({
+          success: true,
+          data: searchResponse,
+          scrapeIds,
+          creditsUsed: credits_billed,
+          id: jobId,
+        });
+
+        await logSearch(
           {
             id: jobId,
             request_id: jobId,
@@ -533,15 +541,11 @@ export async function x402SearchController(
             zeroDataRetention: false,
           },
           false,
+        ).catch(err =>
+          logger.error("Failed to log search to GCS", { error: err, jobId }),
         );
 
-        return res.status(200).json({
-          success: true,
-          data: searchResponse,
-          scrapeIds,
-          creditsUsed: credits_billed,
-          id: jobId,
-        });
+        return;
       } else {
         // Sync mode: process scraped documents
         const allDocsWithCostTracking = results as DocumentWithCostTracking[];
@@ -602,7 +606,15 @@ export async function x402SearchController(
       time_taken: timeTakenInSeconds,
     });
 
-    logSearch(
+    // For sync scraping or no scraping, don't include scrapeIds
+    res.status(200).json({
+      success: true,
+      data: searchResponse,
+      creditsUsed: credits_billed,
+      id: jobId,
+    });
+
+    await logSearch(
       {
         id: jobId,
         request_id: jobId,
@@ -618,15 +630,11 @@ export async function x402SearchController(
         zeroDataRetention: false, // not supported
       },
       false,
+    ).catch(err =>
+      logger.error("Failed to log search to GCS", { error: err, jobId }),
     );
 
-    // For sync scraping or no scraping, don't include scrapeIds
-    return res.status(200).json({
-      success: true,
-      data: searchResponse,
-      creditsUsed: credits_billed,
-      id: jobId,
-    });
+    return;
   } catch (error) {
     if (error instanceof z.ZodError) {
       logger.warn("Invalid request body [x402]", { error: error.issues });

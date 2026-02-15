@@ -143,24 +143,6 @@ export async function searchController(
     const endTime = new Date().getTime();
     const timeTakenInSeconds = (endTime - middlewareStartTime) / 1000;
 
-    logSearch(
-      {
-        id: jobId,
-        request_id: agentRequestId ?? jobId,
-        query: req.body.query,
-        is_successful: true,
-        error: undefined,
-        results: result.response as any,
-        num_results: result.totalResultsCount,
-        time_taken: timeTakenInSeconds,
-        team_id: req.auth.team_id,
-        options: req.body,
-        credits_cost: shouldBill ? result.searchCredits : 0,
-        zeroDataRetention: isZDROrAnon ?? false,
-      },
-      false,
-    );
-
     const totalRequestTime = new Date().getTime() - middlewareStartTime;
     const controllerTime = new Date().getTime() - controllerStartTime;
 
@@ -179,12 +161,34 @@ export async function searchController(
       scrapeful: result.shouldScrape,
     });
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       data: result.response,
       creditsUsed: result.totalCredits,
       id: jobId,
     });
+
+    await logSearch(
+      {
+        id: jobId,
+        request_id: agentRequestId ?? jobId,
+        query: req.body.query,
+        is_successful: true,
+        error: undefined,
+        results: result.response as any,
+        num_results: result.totalResultsCount,
+        time_taken: timeTakenInSeconds,
+        team_id: req.auth.team_id,
+        options: req.body,
+        credits_cost: shouldBill ? result.searchCredits : 0,
+        zeroDataRetention: isZDROrAnon ?? false,
+      },
+      false,
+    ).catch(err =>
+      logger.error("Failed to log search to GCS", { error: err, jobId }),
+    );
+
+    return;
   } catch (error) {
     if (error instanceof z.ZodError) {
       logger.warn("Invalid request body", { error: error.issues });

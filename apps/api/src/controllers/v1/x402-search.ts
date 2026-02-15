@@ -328,7 +328,9 @@ export async function x402SearchController(
       time_taken: timeTakenInSeconds,
     });
 
-    logSearch(
+    res.status(200).json(responseData);
+
+    await logSearch(
       {
         id: jobId,
         request_id: jobId,
@@ -344,9 +346,11 @@ export async function x402SearchController(
         zeroDataRetention: false, // not supported
       },
       false,
+    ).catch(err =>
+      logger.error("Failed to log search to GCS", { error: err, jobId }),
     );
 
-    return res.status(200).json(responseData);
+    return;
   } catch (error) {
     if (error instanceof ScrapeJobTimeoutError) {
       return res.status(408).json({

@@ -212,7 +212,25 @@ export async function searchController(
     const endTime = new Date().getTime();
     const timeTakenInSeconds = (endTime - middlewareStartTime) / 1000;
 
-    logSearch(
+    const totalRequestTime = new Date().getTime() - middlewareStartTime;
+    const controllerTime = new Date().getTime() - controllerStartTime;
+
+    logger.info("Request metrics", {
+      version: "v1",
+      mode: "search",
+      jobId,
+      middlewareStartTime,
+      controllerStartTime,
+      middlewareTime,
+      controllerTime,
+      totalRequestTime,
+      creditsUsed: result.searchCredits,
+      scrapeful: shouldScrape,
+    });
+
+    res.status(200).json(responseData);
+
+    await logSearch(
       {
         id: jobId,
         request_id: jobId,
@@ -232,25 +250,11 @@ export async function searchController(
         zeroDataRetention: false,
       },
       false,
+    ).catch(err =>
+      logger.error("Failed to log search to GCS", { error: err, jobId }),
     );
 
-    const totalRequestTime = new Date().getTime() - middlewareStartTime;
-    const controllerTime = new Date().getTime() - controllerStartTime;
-
-    logger.info("Request metrics", {
-      version: "v1",
-      mode: "search",
-      jobId,
-      middlewareStartTime,
-      controllerStartTime,
-      middlewareTime,
-      controllerTime,
-      totalRequestTime,
-      creditsUsed: result.searchCredits,
-      scrapeful: shouldScrape,
-    });
-
-    return res.status(200).json(responseData);
+    return;
   } catch (error) {
     if (error instanceof ScrapeJobTimeoutError) {
       return res.status(408).json({
