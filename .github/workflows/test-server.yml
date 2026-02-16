@@ -335,7 +335,7 @@ jobs:
         run: |
           docker build -t firecrawl/go-html-to-md-service:latest ./apps/go-html-to-md-service
           docker run -d -p 8080:8080 --name go-html-to-md-service firecrawl/go-html-to-md-service:latest
-          pnpx wait-on http://localhost:8080/health -t 30s
+          pnpx wait-on http-get://localhost:8080/health -t 60s
 
       - name: Start fake-gcs-server
         run: |
