@@ -10,6 +10,7 @@ import {
   listBrowserSessions,
   updateBrowserSessionActivity,
   updateBrowserSessionStatus,
+  claimBrowserSessionDestroyed,
   getActiveBrowserSessionCount,
   invalidateActiveBrowserSessionCount,
   MAX_ACTIVE_BROWSER_SESSIONS_PER_TEAM,
@@ -441,13 +442,22 @@ export async function browserDeleteController(
     });
   }
 
-  // Mark destroyed in Supabase
-  await updateBrowserSessionStatus(session.id, "destroyed");
+  const claimed = await claimBrowserSessionDestroyed(session.id);
 
+  console.log("claimed", claimed);
   // Invalidate cached count so next check reflects the destroyed session
   invalidateActiveBrowserSessionCount(session.team_id).catch(() => {});
 
-  // Bill for browser session usage
+  if (!claimed) {
+    // The webhook (or another DELETE call) already transitioned and billed.
+    logger.info("Session already destroyed by another path, skipping billing", {
+      sessionId: session.id,
+    });
+    return res.status(200).json({
+      success: true,
+    });
+  }
+
   const durationMs =
     sessionDurationMs ??
     Date.now() - new Date(session.created_at).getTime();
@@ -473,8 +483,6 @@ export async function browserDeleteController(
 
   return res.status(200).json({
     success: true,
-    sessionDurationMs: durationMs,
-    creditsBilled,
   });
 }
 
@@ -554,17 +562,18 @@ export async function browserWebhookDestroyedController(
     return res.status(200).json({ ok: true });
   }
 
-  if (session.status === "destroyed") {
-    logger.info("Session already destroyed", { sessionId: session.id, browserId });
+  const claimed = await claimBrowserSessionDestroyed(session.id);
+
+  invalidateActiveBrowserSessionCount(session.team_id).catch(() => {});
+
+  if (!claimed) {
+    logger.info("Session already destroyed by another path, skipping billing", {
+      sessionId: session.id,
+      browserId,
+    });
     return res.status(200).json({ ok: true });
   }
 
-  await updateBrowserSessionStatus(session.id, "destroyed");
-
-  // Invalidate cached count so the team can create new sessions immediately
-  invalidateActiveBrowserSessionCount(session.team_id).catch(() => {});
-
-  // Bill for browser session usage
   const durationMs = Date.now() - new Date(session.created_at).getTime();
   const creditsBilled = calculateBrowserSessionCredits(durationMs);
 
