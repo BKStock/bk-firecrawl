@@ -19,7 +19,6 @@ import { RequestWithAuth } from "./types";
 const browserCreateRequestSchema = z.object({
   ttl: z.number().min(30).max(3600).default(300),
   activityTtl: z.number().min(10).max(3600).optional(),
-  region: z.string().optional(),
   streamWebView: z.boolean().default(true),
 });
 
@@ -169,7 +168,7 @@ export async function browserCreateController(
 
   req.body = browserCreateRequestSchema.parse(req.body);
 
-  const { ttl, activityTtl, region, streamWebView } = req.body;
+  const { ttl, activityTtl, streamWebView } = req.body;
 
   if (!config.BROWSER_SERVICE_URL) {
     return res.status(503).json({
@@ -179,7 +178,7 @@ export async function browserCreateController(
     });
   }
 
-  logger.info("Creating browser session", { ttl, activityTtl, region });
+  logger.info("Creating browser session", { ttl, activityTtl });
 
   // 1. Create a browser session via the browser service
   let svcResponse: BrowserServiceCreateResponse;
