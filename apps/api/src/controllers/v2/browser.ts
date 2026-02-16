@@ -444,7 +444,6 @@ export async function browserDeleteController(
 
   const claimed = await claimBrowserSessionDestroyed(session.id);
 
-  console.log("claimed", claimed);
   // Invalidate cached count so next check reflects the destroyed session
   invalidateActiveBrowserSessionCount(session.team_id).catch(() => {});
 
