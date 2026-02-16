@@ -197,7 +197,21 @@ export async function browserCreateController(
 
   logger.info("Creating browser session", { ttl, activityTtl });
 
-  // 0. Enforce per-team active session limit
+  // 0a. Check if team has enough credits for the full TTL
+  const estimatedCredits = calculateBrowserSessionCredits(ttl * 1000);
+  if (req.acuc && req.acuc.remaining_credits < estimatedCredits) {
+    logger.warn("Insufficient credits for browser session TTL", {
+      estimatedCredits,
+      remainingCredits: req.acuc.remaining_credits,
+      ttl,
+    });
+    return res.status(402).json({
+      success: false,
+      error: `Insufficient credits for a ${ttl}s browser session (requires ~${estimatedCredits} credits). For more credits, you can upgrade your plan at https://firecrawl.dev/pricing.`,
+    });
+  }
+
+  // 0b. Enforce per-team active session limit
   const activeCount = await getActiveBrowserSessionCount(req.auth.team_id);
   if (activeCount >= MAX_ACTIVE_BROWSER_SESSIONS_PER_TEAM) {
     logger.warn("Active browser session limit reached", {
