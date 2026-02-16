@@ -15,10 +15,7 @@ import {
   MAX_ACTIVE_BROWSER_SESSIONS_PER_TEAM,
 } from "../../lib/browser-sessions";
 import { RequestWithAuth } from "./types";
-import {
-  billTeam,
-  checkTeamCredits,
-} from "../../services/billing/credit_billing";
+import { billTeam } from "../../services/billing/credit_billing";
 
 const BROWSER_CREDITS_PER_HOUR = 100;
 
@@ -200,25 +197,7 @@ export async function browserCreateController(
 
   logger.info("Creating browser session", { ttl, activityTtl });
 
-  // 0a. Pre-flight credit check — estimate credits for the requested TTL
-  const estimatedCredits = calculateBrowserSessionCredits(ttl * 1000);
-  const creditCheck = await checkTeamCredits(
-    req.acuc ?? null,
-    req.auth.team_id,
-    estimatedCredits,
-  );
-  if (!creditCheck.success) {
-    logger.warn("Insufficient credits for browser session", {
-      estimatedCredits,
-      remainingCredits: creditCheck.remainingCredits,
-    });
-    return res.status(402).json({
-      success: false,
-      error: creditCheck.message,
-    });
-  }
-
-  // 0b. Enforce per-team active session limit
+  // 0. Enforce per-team active session limit
   const activeCount = await getActiveBrowserSessionCount(req.auth.team_id);
   if (activeCount >= MAX_ACTIVE_BROWSER_SESSIONS_PER_TEAM) {
     logger.warn("Active browser session limit reached", {
