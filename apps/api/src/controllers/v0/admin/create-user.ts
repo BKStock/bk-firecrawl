@@ -29,19 +29,44 @@ async function addCoupon(teamId: string, integration: any) {
     throw error;
   }
 
-  if (integration.coupon_rate_limits || integration.coupon_concurrency) {
+  if (integration.coupon_rate_limits) {
     const { error: overrideError } = await (supabase_service as any)
       .from("team_overrides")
       .insert({
         team_id: teamId,
-        rate_limits: integration.coupon_rate_limits || null,
-        concurrency: integration.coupon_concurrency || null,
+        rate_limits: integration.coupon_rate_limits,
         expires_at: expiresAt,
         internal_comment: `Integration coupon (${integration.display_name || integration.slug || "unknown"})`,
       });
 
     if (overrideError) {
       throw overrideError;
+    }
+  }
+
+  if (integration.coupon_concurrency) {
+    // Look up the org for this team (created by handle_new_user trigger)
+    const { data: orgLink } = await supabase_service
+      .from("organization_teams")
+      .select("org_id")
+      .eq("team_id", teamId)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
+
+    if (orgLink) {
+      const { error: orgOverrideError } = await (supabase_service as any)
+        .from("organization_overrides")
+        .insert({
+          org_id: orgLink.org_id,
+          concurrent_browsers: integration.coupon_concurrency,
+          expires_at: expiresAt,
+          internal_comment: `Integration coupon (${integration.display_name || integration.slug || "unknown"})`,
+        });
+
+      if (orgOverrideError) {
+        throw orgOverrideError;
+      }
     }
   }
 }
