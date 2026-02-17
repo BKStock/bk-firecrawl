@@ -249,10 +249,13 @@ export async function integCreateUserController(req: Request, res: Response) {
         teamId = newTeam.id;
 
         // Update org name to match team ID (convention)
-        await supabase_service
+        const { error: orgNameError } = await supabase_service
           .from("organizations")
           .update({ name: teamId })
           .eq("id", newOrg.id);
+        if (orgNameError) {
+          logger.warn("Failed to update org name to team ID", { error: orgNameError, orgId: newOrg.id, teamId });
+        }
 
         // Link team to org in join table
         const { error: orgLinkError } = await supabase_service
