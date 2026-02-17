@@ -246,17 +246,19 @@ export async function integCreateUserController(req: Request, res: Response) {
           .single();
         if (newOrgError) {
           logger.error("Failed to create organization", { error: newOrgError });
-        } else {
-          const { error: orgLinkError } = await supabase_service
-            .from("organization_teams")
-            .insert({
-              org_id: newOrg.id,
-              team_id: teamId,
-              is_active: true,
-            });
-          if (orgLinkError) {
-            logger.error("Failed to link team to organization", { error: orgLinkError });
-          }
+          return res.status(500).json({ error: "Failed to create organization" });
+        }
+
+        const { error: orgLinkError } = await supabase_service
+          .from("organization_teams")
+          .insert({
+            org_id: newOrg.id,
+            team_id: teamId,
+            is_active: true,
+          });
+        if (orgLinkError) {
+          logger.error("Failed to link team to organization", { error: orgLinkError });
+          return res.status(500).json({ error: "Failed to link team to organization" });
         }
 
         const { error: newUserTeamError } = await supabase_service
