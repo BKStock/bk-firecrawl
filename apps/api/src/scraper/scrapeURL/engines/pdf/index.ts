@@ -15,7 +15,7 @@ import {
   RemoveFeatureError,
   EngineUnsuccessfulError,
 } from "../../error";
-import { readFile, unlink } from "node:fs/promises";
+import { readFile, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import type { Response } from "undici";
 import {
@@ -27,11 +27,17 @@ import {
   shouldParsePDF,
   getPDFMaxPages,
 } from "../../../../controllers/v2/types";
-import { getPdfMetadata } from "@mendable/firecrawl-rs";
+import { getPdfMetadata, processPdf } from "@mendable/firecrawl-rs";
 
 type PDFProcessorResult = { html: string; markdown?: string };
+type RustExtractionResult = {
+  content: PDFProcessorResult | null;
+  pageCount: number;
+  title: string | null | undefined;
+};
 
 const MAX_FILE_SIZE = 19 * 1024 * 1024; // 19MB
+const MAX_RUST_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const MILLISECONDS_PER_PAGE = 150;
 
 async function scrapePDFWithRunPodMU(
@@ -249,6 +255,72 @@ async function scrapePDFWithParsePDF(
   };
 }
 
+async function scrapePDFWithRust(
+  meta: Meta,
+  tempFilePath: string,
+): Promise<RustExtractionResult | null> {
+  const logger = meta.logger.child({ method: "scrapePDF/rustExtract" });
+  const startedAt = Date.now();
+
+  try {
+    const fileSize = (await stat(tempFilePath)).size;
+    if (fileSize > MAX_RUST_FILE_SIZE) {
+      logger.info("PDF too large for Rust extraction, skipping", {
+        fileSize,
+        maxSize: MAX_RUST_FILE_SIZE,
+      });
+      return null;
+    }
+
+    const result = processPdf(tempFilePath);
+    const durationMs = Date.now() - startedAt;
+
+    logger.info("Rust PDF extraction completed", {
+      durationMs,
+      pdfType: result.pdfType,
+      pageCount: result.pageCount,
+      confidence: result.confidence,
+      markdownLength: result.markdown?.length ?? 0,
+      url: meta.rewrittenUrl ?? meta.url,
+    });
+
+    if (
+      result.pdfType !== "TextBased" ||
+      result.confidence < 0.95 ||
+      !result.markdown?.length
+    ) {
+      logger.info("Rust extraction not applicable, falling through to MU", {
+        reason:
+          result.pdfType !== "TextBased"
+            ? `pdfType=${result.pdfType}`
+            : result.confidence < 0.95
+              ? `confidence=${result.confidence}`
+              : "empty markdown",
+      });
+      // Return metadata (avoids redundant getPdfMetadata call) but no content
+      return {
+        content: null,
+        pageCount: result.pageCount,
+        title: result.title,
+      };
+    }
+
+    const html = await marked.parse(result.markdown, { async: true });
+    return {
+      content: { markdown: result.markdown, html },
+      pageCount: result.pageCount,
+      title: result.title,
+    };
+  } catch (error) {
+    logger.warn("Rust PDF extraction failed", {
+      error,
+      durationMs: Date.now() - startedAt,
+    });
+    Sentry.captureException(error);
+    return null;
+  }
+}
+
 export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
   const shouldParse = shouldParsePDF(meta.options.parsers);
   const maxPages = getPDFMaxPages(meta.options.parsers);
@@ -338,10 +410,39 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
       }
     }
 
-    const pdfMetadata = await getPdfMetadata(tempFilePath);
-    const effectivePageCount = maxPages
-      ? Math.min(pdfMetadata.numPages, maxPages)
-      : pdfMetadata.numPages;
+    let result: PDFProcessorResult | null = null;
+    let effectivePageCount: number;
+    let metadataTitle: string | null | undefined;
+
+    // Rust extraction feature flag: enabled + percentage roll
+    const rustSelected =
+      config.PDF_RUST_EXTRACT &&
+      Math.random() * 100 < config.PDF_RUST_EXTRACT_PERCENT;
+    const shadow = rustSelected && !!config.PDF_RUST_EXTRACT_SHADOW;
+
+    // 1. Try Rust extraction (if feature-flagged)
+    // processPdf does detection + extraction in one pass, so we get metadata for free
+    let rustResult: RustExtractionResult | null = null;
+    if (rustSelected) {
+      rustResult = await scrapePDFWithRust(meta, tempFilePath);
+      if (!shadow && rustResult?.content) {
+        result = rustResult.content;
+      }
+    }
+
+    // 2. Get metadata: reuse from Rust result, or call getPdfMetadata
+    if (rustResult) {
+      effectivePageCount = maxPages
+        ? Math.min(rustResult.pageCount, maxPages)
+        : rustResult.pageCount;
+      metadataTitle = rustResult.title;
+    } else {
+      const pdfMetadata = getPdfMetadata(tempFilePath);
+      effectivePageCount = maxPages
+        ? Math.min(pdfMetadata.numPages, maxPages)
+        : pdfMetadata.numPages;
+      metadataTitle = pdfMetadata.title;
+    }
 
     if (
       effectivePageCount * MILLISECONDS_PER_PAGE >
@@ -353,73 +454,85 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
       );
     }
 
-    let result: PDFProcessorResult | null = null;
+    // 3. Only read base64 + call MU if Rust didn't produce a final result
+    if (!result) {
+      const base64Content = (await readFile(tempFilePath)).toString("base64");
 
-    const base64Content = (await readFile(tempFilePath)).toString("base64");
+      if (
+        base64Content.length < MAX_FILE_SIZE &&
+        config.RUNPOD_MU_API_KEY &&
+        config.RUNPOD_MU_POD_ID
+      ) {
+        const muV1StartedAt = Date.now();
+        try {
+          result = await scrapePDFWithRunPodMU(
+            {
+              ...meta,
+              logger: meta.logger.child({
+                method: "scrapePDF/scrapePDFWithRunPodMU",
+              }),
+            },
+            tempFilePath,
+            base64Content,
+            maxPages,
+          );
+          const muV1DurationMs = Date.now() - muV1StartedAt;
+          meta.logger
+            .child({ method: "scrapePDF/MUv1Experiment" })
+            .info("MU v1 completed", {
+              durationMs: muV1DurationMs,
+              url: meta.rewrittenUrl ?? meta.url,
+              pages: effectivePageCount,
+              success: true,
+            });
+        } catch (error) {
+          if (
+            error instanceof RemoveFeatureError ||
+            error instanceof AbortManagerThrownError
+          ) {
+            throw error;
+          }
+          meta.logger.warn(
+            "RunPod MU failed to parse PDF (could be due to timeout) -- falling back to parse-pdf",
+            { error },
+          );
+          Sentry.captureException(error);
+          const muV1DurationMs = Date.now() - muV1StartedAt;
+          meta.logger
+            .child({ method: "scrapePDF/MUv1Experiment" })
+            .info("MU v1 failed", {
+              durationMs: muV1DurationMs,
+              url: meta.rewrittenUrl ?? meta.url,
+              pages: effectivePageCount,
+              success: false,
+            });
+        }
+      }
 
-    // First try RunPod MU if conditions are met
-    if (
-      base64Content.length < MAX_FILE_SIZE &&
-      config.RUNPOD_MU_API_KEY &&
-      config.RUNPOD_MU_POD_ID
-    ) {
-      const muV1StartedAt = Date.now();
-      try {
-        result = await scrapePDFWithRunPodMU(
+      // If RunPod MU failed or wasn't attempted, use PdfParse
+      if (!result) {
+        result = await scrapePDFWithParsePDF(
           {
             ...meta,
             logger: meta.logger.child({
-              method: "scrapePDF/scrapePDFWithRunPodMU",
+              method: "scrapePDF/scrapePDFWithParsePDF",
             }),
           },
           tempFilePath,
-          base64Content,
-          maxPages,
         );
-        const muV1DurationMs = Date.now() - muV1StartedAt;
+      }
+
+      // Shadow comparison: log both Rust and MU results
+      if (shadow && rustSelected) {
         meta.logger
-          .child({ method: "scrapePDF/MUv1Experiment" })
-          .info("MU v1 completed", {
-            durationMs: muV1DurationMs,
+          .child({ method: "scrapePDF/rustShadow" })
+          .info("Rust shadow comparison", {
+            rustSuccess: rustResult !== null,
+            rustMarkdownLength: rustResult?.content.markdown?.length ?? 0,
+            muMarkdownLength: result?.markdown?.length ?? 0,
             url: meta.rewrittenUrl ?? meta.url,
-            pages: effectivePageCount,
-            success: true,
-          });
-      } catch (error) {
-        if (
-          error instanceof RemoveFeatureError ||
-          error instanceof AbortManagerThrownError
-        ) {
-          throw error;
-        }
-        meta.logger.warn(
-          "RunPod MU failed to parse PDF (could be due to timeout) -- falling back to parse-pdf",
-          { error },
-        );
-        Sentry.captureException(error);
-        const muV1DurationMs = Date.now() - muV1StartedAt;
-        meta.logger
-          .child({ method: "scrapePDF/MUv1Experiment" })
-          .info("MU v1 failed", {
-            durationMs: muV1DurationMs,
-            url: meta.rewrittenUrl ?? meta.url,
-            pages: effectivePageCount,
-            success: false,
           });
       }
-    }
-
-    // If RunPod MU failed or wasn't attempted, use PdfParse
-    if (!result) {
-      result = await scrapePDFWithParsePDF(
-        {
-          ...meta,
-          logger: meta.logger.child({
-            method: "scrapePDF/scrapePDFWithParsePDF",
-          }),
-        },
-        tempFilePath,
-      );
     }
 
     return {
@@ -428,10 +541,8 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
       html: result?.html ?? "",
       markdown: result?.markdown ?? "",
       pdfMetadata: {
-        // Rust parser gets the metadata incorrectly, so we overwrite the page count here with the effective page count
-        // TODO: fix this later
         numPages: effectivePageCount,
-        title: pdfMetadata.title,
+        title: metadataTitle ?? undefined,
       },
 
       proxyUsed: "basic",

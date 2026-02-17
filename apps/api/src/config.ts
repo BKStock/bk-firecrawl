@@ -155,6 +155,11 @@ const configSchema = z.object({
   RUNPOD_MU_API_KEY: z.string().optional(),
   RUNPOD_MU_POD_ID: z.string().optional(),
 
+  // PDF Rust Extraction (pdf-inspector)
+  PDF_RUST_EXTRACT: z.stringbool().optional(),
+  PDF_RUST_EXTRACT_PERCENT: z.coerce.number().default(0),
+  PDF_RUST_EXTRACT_SHADOW: z.stringbool().optional(),
+
   // Webhooks
   SELF_HOSTED_WEBHOOK_URL: z.string().optional(),
   SELF_HOSTED_WEBHOOK_HMAC_SECRET: z.string().optional(),
