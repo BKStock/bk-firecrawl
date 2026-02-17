@@ -1,12 +1,7 @@
 import { Meta } from "../..";
 import { config } from "../../../../config";
 import { EngineScrapeResult } from "..";
-import * as marked from "marked";
-import { robustFetch } from "../../lib/fetch";
-import { z } from "zod";
 import * as Sentry from "@sentry/node";
-import escapeHtml from "escape-html";
-import PdfParse from "pdf-parse";
 import { downloadFile, fetchFileToBuffer } from "../utils/downloadFile";
 import {
   PDFAntibotError,
@@ -15,311 +10,22 @@ import {
   RemoveFeatureError,
   EngineUnsuccessfulError,
 } from "../../error";
-import { readFile, stat, unlink } from "node:fs/promises";
-import path from "node:path";
+import { readFile, unlink } from "node:fs/promises";
 import type { Response } from "undici";
-import {
-  getPdfResultFromCache,
-  savePdfResultToCache,
-} from "../../../../lib/gcs-pdf-cache";
 import { AbortManagerThrownError } from "../../lib/abortManager";
 import {
   shouldParsePDF,
   getPDFMaxPages,
 } from "../../../../controllers/v2/types";
-import { getPdfMetadata, processPdf } from "@mendable/firecrawl-rs";
-
-type PDFProcessorResult = { html: string; markdown?: string };
-type RustExtractionResult = {
-  content: PDFProcessorResult | null;
-  pageCount: number;
-  title: string | null | undefined;
-};
-
-const MAX_FILE_SIZE = 19 * 1024 * 1024; // 19MB
-const MAX_RUST_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const MILLISECONDS_PER_PAGE = 150;
-
-async function scrapePDFWithRunPodMU(
-  meta: Meta,
-  tempFilePath: string,
-  base64Content: string,
-  maxPages?: number,
-): Promise<PDFProcessorResult> {
-  meta.logger.debug("Processing PDF document with RunPod MU", {
-    tempFilePath,
-  });
-
-  if (!maxPages) {
-    try {
-      const cachedResult = await getPdfResultFromCache(base64Content);
-      if (cachedResult) {
-        meta.logger.info("Using cached RunPod MU result for PDF", {
-          tempFilePath,
-        });
-        return cachedResult;
-      }
-    } catch (error) {
-      meta.logger.warn("Error checking PDF cache, proceeding with RunPod MU", {
-        error,
-        tempFilePath,
-      });
-    }
-  }
-
-  meta.abort.throwIfAborted();
-
-  meta.logger.info("Max Pdf pages", {
-    tempFilePath,
-    maxPages,
-  });
-
-  if (
-    config.PDF_MU_V2_EXPERIMENT === "true" &&
-    config.PDF_MU_V2_BASE_URL &&
-    Math.random() * 100 < config.PDF_MU_V2_EXPERIMENT_PERCENT
-  ) {
-    (async () => {
-      const pdfParseId = crypto.randomUUID();
-      const startedAt = Date.now();
-      const logger = meta.logger.child({ method: "scrapePDF/MUv2Experiment" });
-      logger.info("MU v2 experiment started", {
-        scrapeId: meta.id,
-        pdfParseId,
-        url: meta.rewrittenUrl ?? meta.url,
-        maxPages,
-      });
-      try {
-        const resp = await robustFetch({
-          url: config.PDF_MU_V2_BASE_URL ?? "",
-          method: "POST",
-          headers: config.PDF_MU_V2_API_KEY
-            ? { Authorization: `Bearer ${config.PDF_MU_V2_API_KEY}` }
-            : undefined,
-          body: {
-            input: {
-              file_content: base64Content,
-              filename: path.basename(tempFilePath) + ".pdf",
-              timeout: meta.abort.scrapeTimeout(),
-              created_at: Date.now(),
-              id: pdfParseId,
-              ...(maxPages !== undefined && { max_pages: maxPages }),
-            },
-          },
-          logger,
-          schema: z.any(),
-          mock: meta.mock,
-          abort: meta.abort.asSignal(),
-        });
-        const body: any = resp as any;
-        const tokensIn = body?.metadata?.["total-input-tokens"];
-        const tokensOut = body?.metadata?.["total-output-tokens"];
-        const pages = body?.metadata?.["pdf-total-pages"];
-        const durationMs = Date.now() - startedAt;
-        logger.info("MU v2 experiment completed", {
-          durationMs,
-          url: meta.rewrittenUrl ?? meta.url,
-          tokensIn,
-          tokensOut,
-          pages,
-        });
-      } catch (error) {
-        const durationMs = Date.now() - startedAt;
-        logger.warn("MU v2 experiment failed", { error, durationMs });
-      }
-    })();
-  }
-
-  const muV1StartedAt = Date.now();
-  const podStart = await robustFetch({
-    url: "https://api.runpod.ai/v2/" + config.RUNPOD_MU_POD_ID + "/runsync",
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.RUNPOD_MU_API_KEY}`,
-    },
-    body: {
-      input: {
-        file_content: base64Content,
-        filename: path.basename(tempFilePath) + ".pdf",
-        timeout: meta.abort.scrapeTimeout(),
-        created_at: Date.now(),
-        ...(maxPages !== undefined && { max_pages: maxPages }),
-      },
-    },
-    logger: meta.logger.child({
-      method: "scrapePDFWithRunPodMU/runsync/robustFetch",
-    }),
-    schema: z.object({
-      id: z.string(),
-      status: z.string(),
-      output: z
-        .object({
-          markdown: z.string(),
-        })
-        .optional(),
-    }),
-    mock: meta.mock,
-    abort: meta.abort.asSignal(),
-  });
-
-  let status: string = podStart.status;
-  let result: { markdown: string } | undefined = podStart.output;
-
-  if (status === "IN_QUEUE" || status === "IN_PROGRESS") {
-    do {
-      meta.abort.throwIfAborted();
-      await new Promise(resolve => setTimeout(resolve, 2500));
-      meta.abort.throwIfAborted();
-      const podStatus = await robustFetch({
-        url: `https://api.runpod.ai/v2/${config.RUNPOD_MU_POD_ID}/status/${podStart.id}`,
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${config.RUNPOD_MU_API_KEY}`,
-        },
-        logger: meta.logger.child({
-          method: "scrapePDFWithRunPodMU/status/robustFetch",
-        }),
-        schema: z.object({
-          status: z.string(),
-          output: z
-            .object({
-              markdown: z.string(),
-            })
-            .optional(),
-        }),
-        mock: meta.mock,
-        abort: meta.abort.asSignal(),
-      });
-      status = podStatus.status;
-      result = podStatus.output;
-    } while (status !== "COMPLETED" && status !== "FAILED");
-  }
-
-  if (status === "FAILED") {
-    const durationMs = Date.now() - muV1StartedAt;
-    meta.logger.child({ method: "scrapePDF/MUv1" }).warn("MU v1 failed", {
-      durationMs,
-      url: meta.rewrittenUrl ?? meta.url,
-    });
-    throw new Error("RunPod MU failed to parse PDF");
-  }
-
-  if (!result) {
-    const durationMs = Date.now() - muV1StartedAt;
-    meta.logger.child({ method: "scrapePDF/MUv1" }).warn("MU v1 failed", {
-      durationMs,
-      url: meta.rewrittenUrl ?? meta.url,
-    });
-    throw new Error("RunPod MU returned no result");
-  }
-
-  const processorResult = {
-    markdown: result.markdown,
-    html: await marked.parse(result.markdown, { async: true }),
-  };
-
-  if (!meta.internalOptions.zeroDataRetention) {
-    try {
-      await savePdfResultToCache(base64Content, processorResult);
-    } catch (error) {
-      meta.logger.warn("Error saving PDF to cache", {
-        error,
-        tempFilePath,
-      });
-    }
-  }
-
-  {
-    const durationMs = Date.now() - muV1StartedAt;
-    meta.logger.child({ method: "scrapePDF/MUv1" }).info("MU v1 completed", {
-      durationMs,
-      url: meta.rewrittenUrl ?? meta.url,
-    });
-  }
-
-  return processorResult;
-}
-
-async function scrapePDFWithParsePDF(
-  meta: Meta,
-  tempFilePath: string,
-): Promise<PDFProcessorResult> {
-  meta.logger.debug("Processing PDF document with parse-pdf", { tempFilePath });
-
-  const result = await PdfParse(await readFile(tempFilePath));
-  const escaped = escapeHtml(result.text);
-
-  return {
-    markdown: escaped,
-    html: escaped,
-  };
-}
-
-async function scrapePDFWithRust(
-  meta: Meta,
-  tempFilePath: string,
-): Promise<RustExtractionResult | null> {
-  const logger = meta.logger.child({ method: "scrapePDF/rustExtract" });
-  const startedAt = Date.now();
-
-  try {
-    const fileSize = (await stat(tempFilePath)).size;
-    if (fileSize > MAX_RUST_FILE_SIZE) {
-      logger.info("PDF too large for Rust extraction, skipping", {
-        fileSize,
-        maxSize: MAX_RUST_FILE_SIZE,
-      });
-      return null;
-    }
-
-    const result = processPdf(tempFilePath);
-    const durationMs = Date.now() - startedAt;
-
-    logger.info("Rust PDF extraction completed", {
-      durationMs,
-      pdfType: result.pdfType,
-      pageCount: result.pageCount,
-      confidence: result.confidence,
-      markdownLength: result.markdown?.length ?? 0,
-      url: meta.rewrittenUrl ?? meta.url,
-    });
-
-    if (
-      result.pdfType !== "TextBased" ||
-      result.confidence < 0.95 ||
-      !result.markdown?.length
-    ) {
-      logger.info("Rust extraction not applicable, falling through to MU", {
-        reason:
-          result.pdfType !== "TextBased"
-            ? `pdfType=${result.pdfType}`
-            : result.confidence < 0.95
-              ? `confidence=${result.confidence}`
-              : "empty markdown",
-      });
-      // Return metadata (avoids redundant getPdfMetadata call) but no content
-      return {
-        content: null,
-        pageCount: result.pageCount,
-        title: result.title,
-      };
-    }
-
-    const html = await marked.parse(result.markdown, { async: true });
-    return {
-      content: { markdown: result.markdown, html },
-      pageCount: result.pageCount,
-      title: result.title,
-    };
-  } catch (error) {
-    logger.warn("Rust PDF extraction failed", {
-      error,
-      durationMs: Date.now() - startedAt,
-    });
-    Sentry.captureException(error);
-    return null;
-  }
-}
+import { getPdfMetadata } from "@mendable/firecrawl-rs";
+import {
+  MAX_FILE_SIZE,
+  MILLISECONDS_PER_PAGE,
+} from "./types";
+import type { PDFProcessorResult, RustExtractionResult } from "./types";
+import { scrapePDFWithRunPodMU } from "./runpodMU";
+import { scrapePDFWithRust } from "./rustExtract";
+import { scrapePDFWithParsePDF } from "./pdfParse";
 
 export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
   const shouldParse = shouldParsePDF(meta.options.parsers);
@@ -528,7 +234,7 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
           .child({ method: "scrapePDF/rustShadow" })
           .info("Rust shadow comparison", {
             rustSuccess: rustResult !== null,
-            rustMarkdownLength: rustResult?.content.markdown?.length ?? 0,
+            rustMarkdownLength: rustResult?.content?.markdown?.length ?? 0,
             muMarkdownLength: result?.markdown?.length ?? 0,
             url: meta.rewrittenUrl ?? meta.url,
           });
