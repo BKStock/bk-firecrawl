@@ -87,8 +87,9 @@ class HttpClient:
         url = self._build_url(endpoint)
 
         last_exception = None
+        num_attempts = max(1, retries)
 
-        for attempt in range(max(1, retries)):
+        for attempt in range(num_attempts):
             try:
                 response = requests.post(
                     url,
@@ -98,18 +99,18 @@ class HttpClient:
                 )
 
                 if response.status_code == 502:
-                    if attempt < retries - 1:
+                    if attempt < num_attempts - 1:
                         time.sleep(backoff_factor * (2 ** attempt))
                         continue
-                
+
                 return response
-                
+
             except requests.RequestException as e:
                 last_exception = e
-                if attempt == retries - 1:
+                if attempt == num_attempts - 1:
                     raise e
                 time.sleep(backoff_factor * (2 ** attempt))
-        
+
         # This should never be reached due to the exception handling above
         raise last_exception or Exception("Unexpected error in POST request")
     
@@ -134,28 +135,29 @@ class HttpClient:
         url = self._build_url(endpoint)
 
         last_exception = None
+        num_attempts = max(1, retries)
 
-        for attempt in range(max(1, retries)):
+        for attempt in range(num_attempts):
             try:
                 response = requests.get(
                     url,
                     headers=headers,
                     timeout=timeout
                 )
-                
+
                 if response.status_code == 502:
-                    if attempt < retries - 1:
+                    if attempt < num_attempts - 1:
                         time.sleep(backoff_factor * (2 ** attempt))
                         continue
-                
+
                 return response
-                
+
             except requests.RequestException as e:
                 last_exception = e
-                if attempt == retries - 1:
+                if attempt == num_attempts - 1:
                     raise e
                 time.sleep(backoff_factor * (2 ** attempt))
-        
+
         # This should never be reached due to the exception handling above
         raise last_exception or Exception("Unexpected error in GET request")
     
@@ -180,27 +182,28 @@ class HttpClient:
         url = self._build_url(endpoint)
 
         last_exception = None
+        num_attempts = max(1, retries)
 
-        for attempt in range(max(1, retries)):
+        for attempt in range(num_attempts):
             try:
                 response = requests.delete(
                     url,
                     headers=headers,
                     timeout=timeout
                 )
-                
+
                 if response.status_code == 502:
-                    if attempt < retries - 1:
+                    if attempt < num_attempts - 1:
                         time.sleep(backoff_factor * (2 ** attempt))
                         continue
-                
+
                 return response
-                
+
             except requests.RequestException as e:
                 last_exception = e
-                if attempt == retries - 1:
+                if attempt == num_attempts - 1:
                     raise e
                 time.sleep(backoff_factor * (2 ** attempt))
-        
+
         # This should never be reached due to the exception handling above
         raise last_exception or Exception("Unexpected error in DELETE request")

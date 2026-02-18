@@ -63,7 +63,9 @@ class AsyncHttpClient:
         payload["origin"] = f"python-sdk@{version}"
 
         last_exception = None
-        for attempt in range(max(1, retries)):
+        num_attempts = max(1, retries)
+
+        for attempt in range(num_attempts):
             try:
                 response = await self._client.post(
                     endpoint,
@@ -72,13 +74,13 @@ class AsyncHttpClient:
                     timeout=timeout,
                 )
                 if response.status_code == 502:
-                    if attempt < retries - 1:
+                    if attempt < num_attempts - 1:
                         await asyncio.sleep(backoff_factor * (2 ** attempt))
                         continue
                 return response
             except httpx.HTTPError as e:
                 last_exception = e
-                if attempt == retries - 1:
+                if attempt == num_attempts - 1:
                     raise e
                 await asyncio.sleep(backoff_factor * (2 ** attempt))
 
@@ -100,7 +102,9 @@ class AsyncHttpClient:
             backoff_factor = self.backoff_factor
 
         last_exception = None
-        for attempt in range(max(1, retries)):
+        num_attempts = max(1, retries)
+
+        for attempt in range(num_attempts):
             try:
                 response = await self._client.get(
                     endpoint,
@@ -108,13 +112,13 @@ class AsyncHttpClient:
                     timeout=timeout,
                 )
                 if response.status_code == 502:
-                    if attempt < retries - 1:
+                    if attempt < num_attempts - 1:
                         await asyncio.sleep(backoff_factor * (2 ** attempt))
                         continue
                 return response
             except httpx.HTTPError as e:
                 last_exception = e
-                if attempt == retries - 1:
+                if attempt == num_attempts - 1:
                     raise e
                 await asyncio.sleep(backoff_factor * (2 ** attempt))
 
@@ -136,7 +140,9 @@ class AsyncHttpClient:
             backoff_factor = self.backoff_factor
 
         last_exception = None
-        for attempt in range(max(1, retries)):
+        num_attempts = max(1, retries)
+
+        for attempt in range(num_attempts):
             try:
                 response = await self._client.delete(
                     endpoint,
@@ -144,13 +150,13 @@ class AsyncHttpClient:
                     timeout=timeout,
                 )
                 if response.status_code == 502:
-                    if attempt < retries - 1:
+                    if attempt < num_attempts - 1:
                         await asyncio.sleep(backoff_factor * (2 ** attempt))
                         continue
                 return response
             except httpx.HTTPError as e:
                 last_exception = e
-                if attempt == retries - 1:
+                if attempt == num_attempts - 1:
                     raise e
                 await asyncio.sleep(backoff_factor * (2 ** attempt))
 
