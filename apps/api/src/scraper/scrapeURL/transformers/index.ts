@@ -8,6 +8,7 @@ import { extractMetadata } from "../lib/extractMetadata";
 import { performLLMExtract, performSummary } from "./llmExtract";
 import { uploadScreenshot } from "./uploadScreenshot";
 import { removeBase64Images } from "./removeBase64Images";
+import { sanitizeUnicodeLineTerminators } from "./sanitizeUnicodeLineTerminators";
 import { performAgent } from "./agent";
 import { performAttributes } from "./performAttributes";
 
@@ -497,6 +498,7 @@ const transformerStack: Transformer[] = [
   deriveDiff,
   coerceFieldsToFormats,
   removeBase64Images,
+  sanitizeUnicodeLineTerminators,
 ];
 
 export async function executeTransformers(
