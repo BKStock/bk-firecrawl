@@ -203,6 +203,7 @@ async function getNextConcurrentJob(
       if (jobData === null) {
         // TTL expired - remove orphaned sorted set entry
         await redis.zrem(queueKey, member);
+        offset--;
         continue;
       }
       const job: ConcurrencyLimitedJob = JSON.parse(jobData);
