@@ -63,7 +63,7 @@ class AsyncHttpClient:
         payload["origin"] = f"python-sdk@{version}"
 
         last_exception = None
-        for attempt in range(retries):
+        for attempt in range(max(1, retries)):
             try:
                 response = await self._client.post(
                     endpoint,
@@ -100,7 +100,7 @@ class AsyncHttpClient:
             backoff_factor = self.backoff_factor
 
         last_exception = None
-        for attempt in range(retries):
+        for attempt in range(max(1, retries)):
             try:
                 response = await self._client.get(
                     endpoint,
@@ -136,7 +136,7 @@ class AsyncHttpClient:
             backoff_factor = self.backoff_factor
 
         last_exception = None
-        for attempt in range(retries):
+        for attempt in range(max(1, retries)):
             try:
                 response = await self._client.delete(
                     endpoint,

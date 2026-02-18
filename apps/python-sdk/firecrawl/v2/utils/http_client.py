@@ -88,7 +88,7 @@ class HttpClient:
 
         last_exception = None
 
-        for attempt in range(retries):
+        for attempt in range(max(1, retries)):
             try:
                 response = requests.post(
                     url,
@@ -135,7 +135,7 @@ class HttpClient:
 
         last_exception = None
 
-        for attempt in range(retries):
+        for attempt in range(max(1, retries)):
             try:
                 response = requests.get(
                     url,
@@ -181,7 +181,7 @@ class HttpClient:
 
         last_exception = None
 
-        for attempt in range(retries):
+        for attempt in range(max(1, retries)):
             try:
                 response = requests.delete(
                     url,
