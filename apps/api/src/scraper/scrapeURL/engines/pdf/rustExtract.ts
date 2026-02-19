@@ -68,6 +68,14 @@ export async function scrapePDFWithRust(
       };
     }
 
+    if (!result.markdown) {
+      return {
+        content: null,
+        pageCount: result.pageCount,
+        title: result.title,
+      };
+    }
+
     const html = await marked.parse(result.markdown, { async: true });
     return {
       content: { markdown: result.markdown, html },
