@@ -7,5 +7,4 @@ export type RustExtractionResult = {
 };
 
 export const MAX_FILE_SIZE = 19 * 1024 * 1024; // 19MB
-export const MAX_RUST_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 export const MILLISECONDS_PER_PAGE = 150;

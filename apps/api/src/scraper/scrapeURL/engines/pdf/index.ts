@@ -18,10 +18,7 @@ import {
   getPDFMaxPages,
 } from "../../../../controllers/v2/types";
 import { getPdfMetadata } from "@mendable/firecrawl-rs";
-import {
-  MAX_FILE_SIZE,
-  MILLISECONDS_PER_PAGE,
-} from "./types";
+import { MAX_FILE_SIZE, MILLISECONDS_PER_PAGE } from "./types";
 import type { PDFProcessorResult, RustExtractionResult } from "./types";
 import { scrapePDFWithRunPodMU } from "./runpodMU";
 import { scrapePDFWithRust } from "./rustExtract";
@@ -150,9 +147,12 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
       metadataTitle = pdfMetadata.title;
     }
 
+    // Only enforce the per-page time budget when we need MU/fallback.
+    // Rust extraction is fast enough that the constraint doesn't apply.
     if (
+      !result &&
       effectivePageCount * MILLISECONDS_PER_PAGE >
-      (meta.abort.scrapeTimeout() ?? Infinity)
+        (meta.abort.scrapeTimeout() ?? Infinity)
     ) {
       throw new PDFInsufficientTimeError(
         effectivePageCount,

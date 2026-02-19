@@ -1,13 +1,14 @@
 import { Meta } from "../..";
 import * as marked from "marked";
 import * as Sentry from "@sentry/node";
-import { stat } from "node:fs/promises";
 import { processPdf } from "@mendable/firecrawl-rs";
-import { MAX_RUST_FILE_SIZE } from "./types";
+import { config } from "../../../../config";
 import type { RustExtractionResult } from "./types";
 
-/** Check if the Rust extraction result is usable, returning a rejection reason or null. */
-function getSkipReason(result: ReturnType<typeof processPdf>): string | null {
+/** Check if the PDF is eligible for Rust extraction, returning a rejection reason or null. */
+function getIneligibleReason(
+  result: ReturnType<typeof processPdf>,
+): string | null {
   if (result.pdfType !== "TextBased") return `pdfType=${result.pdfType}`;
   if (result.confidence < 0.95) return `confidence=${result.confidence}`;
   if (result.isComplex) return "complex layout (tables/columns)";
@@ -24,15 +25,6 @@ export async function scrapePDFWithRust(
   const startedAt = Date.now();
 
   try {
-    const fileSize = (await stat(tempFilePath)).size;
-    if (fileSize > MAX_RUST_FILE_SIZE) {
-      logger.info("PDF too large for Rust extraction, skipping", {
-        fileSize,
-        maxSize: MAX_RUST_FILE_SIZE,
-      });
-      return null;
-    }
-
     const result = processPdf(tempFilePath);
     const durationMs = Date.now() - startedAt;
 
@@ -45,13 +37,30 @@ export async function scrapePDFWithRust(
       url: meta.rewrittenUrl ?? meta.url,
     });
 
-    const skipReason = getSkipReason(result);
-    if (skipReason) {
-      const level = skipReason.startsWith("empty markdown") ? "warn" : "info";
-      logger[level]("Rust extraction not applicable, falling through to MU", {
-        reason: skipReason,
-      });
-      // Return metadata (avoids redundant getPdfMetadata call) but no content
+    const ineligibleReason = getIneligibleReason(result);
+    const eligible = !ineligibleReason;
+
+    // Always log eligibility so we can query which PDFs would be served by Rust.
+    // Search logs for "rust_pdf_eligible":true to find candidates.
+    logger.info("Rust PDF eligibility", {
+      rust_pdf_eligible: eligible,
+      reason: ineligibleReason ?? "eligible",
+      url: meta.rewrittenUrl ?? meta.url,
+      pdfType: result.pdfType,
+      isComplex: result.isComplex,
+      pageCount: result.pageCount,
+      confidence: result.confidence,
+    });
+
+    if (!eligible || config.PDF_RUST_EXTRACT_DISABLE) {
+      if (eligible && config.PDF_RUST_EXTRACT_DISABLE) {
+        logger.info(
+          "Rust PDF eligible but disabled via PDF_RUST_EXTRACT_DISABLE",
+          {
+            url: meta.rewrittenUrl ?? meta.url,
+          },
+        );
+      }
       return {
         content: null,
         pageCount: result.pageCount,
