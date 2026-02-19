@@ -376,25 +376,25 @@ v2Router.post(
   "/browser",
   authMiddleware(RateLimiterMode.Browser),
   countryCheck,
-  checkCreditsMiddleware(15),
+  checkCreditsMiddleware(2),
   wrap(browserCreateController),
 );
 
 v2Router.get(
   "/browser",
-  authMiddleware(RateLimiterMode.Browser),
+  authMiddleware(RateLimiterMode.BrowserExecute),
   wrap(browserListController),
 );
 
 v2Router.post(
   "/browser/:sessionId/execute",
-  authMiddleware(RateLimiterMode.Browser),
+  authMiddleware(RateLimiterMode.BrowserExecute),
   wrap(browserExecuteController),
 );
 
 v2Router.delete(
   "/browser/:sessionId",
-  authMiddleware(RateLimiterMode.Browser),
+  authMiddleware(RateLimiterMode.BrowserExecute),
   wrap(browserDeleteController),
 );
 

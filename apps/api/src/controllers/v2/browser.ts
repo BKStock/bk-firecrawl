@@ -10,6 +10,7 @@ import {
   listBrowserSessions,
   updateBrowserSessionActivity,
   updateBrowserSessionStatus,
+  updateBrowserSessionCreditsUsed,
   claimBrowserSessionDestroyed,
   getActiveBrowserSessionCount,
   invalidateActiveBrowserSessionCount,
@@ -17,6 +18,8 @@ import {
 } from "../../lib/browser-sessions";
 import { RequestWithAuth } from "./types";
 import { billTeam } from "../../services/billing/credit_billing";
+import { enqueueBrowserSessionActivity } from "../../lib/browser-session-activity";
+import { logRequest } from "../../services/logging/log_job";
 
 const BROWSER_CREDITS_PER_HOUR = 100;
 
@@ -35,7 +38,7 @@ function calculateBrowserSessionCredits(durationMs: number): number {
 
 const browserCreateRequestSchema = z.object({
   ttl: z.number().min(30).max(3600).default(300),
-  activityTtl: z.number().min(10).max(3600).optional(),
+  activityTtl: z.number().min(10).max(3600).default(120),
   streamWebView: z.boolean().default(true),
 });
 
@@ -144,6 +147,7 @@ interface BrowserServiceCreateResponse {
   sessionId: string;
   cdpUrl: string;
   viewUrl: string;
+  iframeUrl: string;
   expiresAt: string;
 }
 
@@ -168,13 +172,13 @@ export async function browserCreateController(
   req: RequestWithAuth<{}, BrowserCreateResponse, BrowserCreateRequest>,
   res: Response<BrowserCreateResponse>,
 ) {
-  if (!req.acuc?.flags?.browserBeta) {
-    return res.status(403).json({
-      success: false,
-      error:
-        "Browser is currently in beta. Please contact support@firecrawl.com to request access.",
-    });
-  }
+  // if (!req.acuc?.flags?.browserBeta) {
+  //   return res.status(403).json({
+  //     success: false,
+  //     error:
+  //       "Browser is currently in beta. Please contact support@firecrawl.com to request access.",
+  //   });
+  // }
 
   const sessionId = uuidv7();
   const logger = _logger.child({
@@ -225,20 +229,39 @@ export async function browserCreateController(
     });
   }
 
-  // 1. Create a browser session via the browser service
-  let svcResponse: BrowserServiceCreateResponse;
-  try {
-    svcResponse = await browserServiceRequest<BrowserServiceCreateResponse>(
-      "POST",
-      "/browsers",
-      {
-        ttl,
-        ...(activityTtl !== undefined ? { activityTtl } : {}),
-      },
-    );
-  } catch (err) {
-    logger.error("Failed to create browser session via browser service", {
-      error: err,
+  // 1. Create a browser session via the browser service (retry up to 3 times)
+  const MAX_CREATE_RETRIES = 3;
+  let svcResponse: BrowserServiceCreateResponse | undefined;
+  let lastCreateError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_CREATE_RETRIES; attempt++) {
+    try {
+      svcResponse = await browserServiceRequest<BrowserServiceCreateResponse>(
+        "POST",
+        "/browsers",
+        {
+          ttl,
+          ...(activityTtl !== undefined ? { activityTtl } : {}),
+        },
+      );
+      break;
+    } catch (err) {
+      lastCreateError = err;
+      logger.warn("Browser session creation attempt failed", {
+        attempt,
+        maxRetries: MAX_CREATE_RETRIES,
+        error: err,
+      });
+      if (attempt < MAX_CREATE_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+      }
+    }
+  }
+
+  if (!svcResponse) {
+    logger.error("Failed to create browser session after all retries", {
+      error: lastCreateError,
+      attempts: MAX_CREATE_RETRIES,
     });
     return res.status(502).json({
       success: false,
@@ -248,6 +271,16 @@ export async function browserCreateController(
 
   // 2. Persist session in Supabase
   try {
+    await logRequest({
+      id: sessionId,
+      kind: "browser",
+      api_version: "v2",
+      team_id: req.auth.team_id,
+      target_hint: "Browser session",
+      origin: "api",
+      zeroDataRetention: false,
+      api_key_id: req.acuc!.api_key_id,
+    });
     await insertBrowserSession({
       id: sessionId,
       team_id: req.auth.team_id,
@@ -255,11 +288,12 @@ export async function browserCreateController(
       workspace_id: "",
       context_id: "",
       cdp_url: svcResponse.cdpUrl,
-      cdp_path: svcResponse.viewUrl, // repurposed: stores view URL
+      cdp_path: svcResponse.iframeUrl, // repurposed: stores view URL
       stream_web_view: streamWebView,
       status: "active",
       ttl_total: ttl,
       ttl_without_activity: activityTtl ?? null,
+      credits_used: null,
     });
   } catch (err) {
     // If we can't persist, tear down the browser session
@@ -288,7 +322,7 @@ export async function browserCreateController(
     success: true,
     id: sessionId,
     cdpUrl: svcResponse.cdpUrl,
-    liveViewUrl: svcResponse.viewUrl,
+    liveViewUrl: svcResponse.iframeUrl,
     expiresAt: svcResponse.expiresAt,
   });
 }
@@ -301,13 +335,13 @@ export async function browserExecuteController(
   >,
   res: Response<BrowserExecuteResponse>,
 ) {
-  if (!req.acuc?.flags?.browserBeta) {
-    return res.status(403).json({
-      success: false,
-      error:
-        "Browser is currently in beta. Please contact support@firecrawl.com to request access.",
-    });
-  }
+  // if (!req.acuc?.flags?.browserBeta) {
+  //   return res.status(403).json({
+  //     success: false,
+  //     error:
+  //       "Browser is currently in beta. Please contact support@firecrawl.com to request access.",
+  //   });
+  // }
 
   req.body = browserExecuteRequestSchema.parse(req.body);
 
@@ -350,6 +384,7 @@ export async function browserExecuteController(
 
   logger.info("Executing code in browser session", { language, timeout });
 
+
   // Execute code via the browser service
   let execResult: BrowserServiceExecResponse;
   try {
@@ -373,6 +408,15 @@ export async function browserExecuteController(
     stderrLength: execResult.stderr?.length,
   });
 
+  enqueueBrowserSessionActivity({
+    team_id: req.auth.team_id,
+    session_id: id,
+    language,
+    timeout,
+    exit_code: execResult.exitCode ?? null,
+    killed: execResult.killed ?? false,
+  });
+
   const hasError = execResult.exitCode !== 0 || execResult.killed;
 
   return res.status(200).json({
@@ -392,13 +436,13 @@ export async function browserDeleteController(
   req: RequestWithAuth<{ sessionId: string }, BrowserDeleteResponse>,
   res: Response<BrowserDeleteResponse>,
 ) {
-  if (!req.acuc?.flags?.browserBeta) {
-    return res.status(403).json({
-      success: false,
-      error:
-        "Browser is currently in beta. Please contact support@firecrawl.com to request access.",
-    });
-  }
+  // if (!req.acuc?.flags?.browserBeta) {
+  //   return res.status(403).json({
+  //     success: false,
+  //     error:
+  //       "Browser is currently in beta. Please contact support@firecrawl.com to request access.",
+  //   });
+  // }
 
   const id = req.params.sessionId;
 
@@ -462,6 +506,14 @@ export async function browserDeleteController(
     Date.now() - new Date(session.created_at).getTime();
   const creditsBilled = calculateBrowserSessionCredits(durationMs);
 
+  updateBrowserSessionCreditsUsed(session.id, creditsBilled).catch((error) => {
+    logger.error("Failed to update credits_used on browser session", {
+      error,
+      sessionId: session.id,
+      creditsBilled,
+    });
+  });
+
   billTeam(
     req.auth.team_id,
     req.acuc?.sub_id ?? undefined,
@@ -489,13 +541,13 @@ export async function browserListController(
   req: RequestWithAuth<{}, BrowserListResponse>,
   res: Response<BrowserListResponse>,
 ) {
-  if (!req.acuc?.flags?.browserBeta) {
-    return res.status(403).json({
-      success: false,
-      error:
-        "Browser is currently in beta. Please contact support@firecrawl.com to request access.",
-    });
-  }
+  // if (!req.acuc?.flags?.browserBeta) {
+  //   return res.status(403).json({
+  //     success: false,
+  //     error:
+  //       "Browser is currently in beta. Please contact support@firecrawl.com to request access.",
+  //   });
+  // }
 
   const logger = _logger.child({
     teamId: req.auth.team_id,
@@ -575,6 +627,14 @@ export async function browserWebhookDestroyedController(
 
   const durationMs = Date.now() - new Date(session.created_at).getTime();
   const creditsBilled = calculateBrowserSessionCredits(durationMs);
+
+  updateBrowserSessionCreditsUsed(session.id, creditsBilled).catch((error) => {
+    logger.error("Failed to update credits_used on browser session via webhook", {
+      error,
+      sessionId: session.id,
+      creditsBilled,
+    });
+  });
 
   billTeam(
     session.team_id,

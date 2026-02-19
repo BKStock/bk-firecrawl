@@ -1,6 +1,6 @@
 {
   "name": "@mendable/firecrawl-js",
-  "version": "4.12.1",
+  "version": "4.13.0",
   "description": "JavaScript SDK for Firecrawl API",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -63,7 +63,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@isaacs/brace-expansion@<=5.0.0": ">=5.0.1"
+      "@isaacs/brace-expansion@<=5.0.0": ">=5.0.1",
+      "minimatch@<10.2.1": ">=10.2.1"
     }
   }
 }
