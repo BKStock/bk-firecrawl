@@ -14,14 +14,14 @@ use url::Url;
 static URL_REGEX: LazyLock<Regex> =
   LazyLock::new(|| Regex::new(r#"url\(['"]?([^'")]+)['"]?\)"#).expect("URL_REGEX is a valid static regex pattern"));
 
-static CMI_TEXT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+static ATTRIBUTION_TEXT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(
     r"(?i)(\u{00A9}|©|\(c\)\s*\d{4}|Copyright\s+(\(c\)|\d{4})|All\s+Rights\s+Reserved|Creative\s+Commons|creativecommons\.org|CC[\s\-]BY([\s\-](SA|NC|ND|NC[\s\-]SA|NC[\s\-]ND))?|CC0|Licensed\s+under|Photo\s+by|Photo\s+credit|Image\s+credit)",
   )
-  .expect("CMI_TEXT_REGEX is a valid static regex pattern")
+  .expect("ATTRIBUTION_TEXT_REGEX is a valid static regex pattern")
 });
 
-const CMI_ATTRIBUTE_SELECTORS: &[&str] = &[
+const ATTRIBUTION_SELECTORS: &[&str] = &[
   "a[rel=\"license\"]",
   "a[href*=\"creativecommons.org\"]",
   "[itemprop=\"copyrightHolder\"]",
@@ -32,13 +32,13 @@ const CMI_ATTRIBUTE_SELECTORS: &[&str] = &[
   "[class*=\"license\"]",
 ];
 
-fn contains_cmi(node: &NodeRef) -> bool {
+fn contains_attribution(node: &NodeRef) -> bool {
   let text = node.text_contents();
-  if CMI_TEXT_REGEX.is_match(&text) {
+  if ATTRIBUTION_TEXT_REGEX.is_match(&text) {
     return true;
   }
 
-  for selector in CMI_ATTRIBUTE_SELECTORS {
+  for selector in ATTRIBUTION_SELECTORS {
     if node.select(selector).is_ok_and(|mut x| x.next().is_some()) {
       return true;
     }
@@ -58,15 +58,15 @@ fn contains_cmi(node: &NodeRef) -> bool {
   false
 }
 
-/// Given a node that contains CMI somewhere inside, recursively remove
-/// child elements that do NOT carry CMI, keeping only text nodes and
-/// CMI-bearing elements.
-fn strip_non_cmi_children(node: &NodeRef) {
+/// Given a node that contains attribution content, recursively remove
+/// child elements that do NOT carry attribution, keeping only text nodes
+/// and attribution-bearing elements.
+fn strip_non_attribution_children(node: &NodeRef) {
   let children: Vec<NodeRef> = node.children().collect();
   for child in children {
     if child.as_element().is_some() {
-      if contains_cmi(&child) {
-        strip_non_cmi_children(&child);
+      if contains_attribution(&child) {
+        strip_non_attribution_children(&child);
       } else {
         child.detach();
       }
@@ -581,8 +581,8 @@ fn _transform_html_inner(
         }) {
           continue;
         }
-        if contains_cmi(tag.as_node()) {
-          strip_non_cmi_children(tag.as_node());
+        if contains_attribution(tag.as_node()) {
+          strip_non_attribution_children(tag.as_node());
           continue;
         }
         tag.as_node().detach();
@@ -1049,203 +1049,203 @@ mod tests {
   #[test]
   fn detects_copyright_symbol() {
     let node = make_node("<footer>© 2024 Company</footer>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_html_entity_copyright() {
     let node = make_node("<footer>&copy; 2024 Company</footer>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_copyright_text() {
     let node = make_node("<div>Copyright 2024 Company Inc.</div>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_copyright_c() {
     let node = make_node("<div>Copyright (c) Company</div>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_all_rights_reserved() {
     let node = make_node("<footer>All Rights Reserved</footer>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_creative_commons_text() {
     let node = make_node("<div>Licensed under Creative Commons</div>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_cc_by_license() {
     let node = make_node("<div>CC BY-SA 4.0</div>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_cc0() {
     let node = make_node("<div>CC0 1.0 Universal</div>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_licensed_under() {
     let node = make_node("<div>Licensed under the MIT License</div>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_photo_credit() {
     let node = make_node("<aside>Photo by John Doe</aside>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_image_credit() {
     let node = make_node("<aside>Image credit: Jane Smith</aside>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_rel_license_link() {
     let node = make_node(r#"<footer><a rel="license" href="https://creativecommons.org/licenses/by/4.0/">License</a></footer>"#);
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_itemprop_copyright_holder() {
     let node = make_node(r#"<footer><span itemprop="copyrightHolder">Company</span></footer>"#);
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_itemprop_copyright_year() {
     let node = make_node(r#"<footer><span itemprop="copyrightYear">2024</span></footer>"#);
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_copyright_class() {
     let node = make_node(r#"<div class="site-copyright">Some text</div>"#);
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_license_class() {
     let node = make_node(r#"<div class="license-info">Some text</div>"#);
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn no_false_positive_on_plain_nav() {
     let node = make_node("<nav><a href='/home'>Home</a><a href='/about'>About</a></nav>");
-    assert!(!contains_cmi(&node));
+    assert!(!contains_attribution(&node));
   }
 
   #[test]
   fn no_false_positive_on_plain_aside() {
     let node = make_node("<aside><h3>Related articles</h3><ul><li>Article 1</li></ul></aside>");
-    assert!(!contains_cmi(&node));
+    assert!(!contains_attribution(&node));
   }
 
   #[test]
   fn no_false_positive_on_social_links() {
     let node = make_node(r#"<div class="social-links"><a href="https://twitter.com">Twitter</a></div>"#);
-    assert!(!contains_cmi(&node));
+    assert!(!contains_attribution(&node));
   }
 
   #[test]
   fn detects_standalone_c_year() {
     let node = make_node("<footer>(c) 2024 Company</footer>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_standalone_c_year_no_space() {
     let node = make_node("<footer>(c)2024 Company</footer>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_uppercase_c_in_parens() {
     let node = make_node("<footer>(C) 2024 Company</footer>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_copyright_lowercase() {
     let node = make_node("<footer>copyright 2024 Company</footer>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_all_rights_reserved_mixed_case() {
     let node = make_node("<footer>all rights reserved</footer>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_copyright_symbol_no_year() {
     let node = make_node("<footer>© Company Name</footer>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_cc_by_alone() {
     let node = make_node("<div>CC BY 4.0</div>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_cc_by_nc_sa() {
     let node = make_node("<div>CC BY-NC-SA 4.0</div>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_cc_by_nc_nd() {
     let node = make_node("<div>CC BY-NC-ND 4.0</div>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_cc_by_with_spaces() {
     let node = make_node("<div>CC BY SA 4.0</div>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_licensed_under_apache() {
     let node = make_node("<footer>Licensed under the Apache License 2.0</footer>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_photo_by_mid_text() {
     let node = make_node("<aside>Header image: Photo by Jane Doe on Unsplash</aside>");
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
-  fn detects_cmi_nested_deep() {
+  fn detects_attribution_nested_deep() {
     let node = make_node(r#"<footer><div class="wrapper"><div class="inner"><span>© 2024 Corp</span></div></div></footer>"#);
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
   fn detects_creativecommons_org_link() {
     let node = make_node(r#"<footer><a href="https://creativecommons.org/licenses/by/4.0/">License</a></footer>"#);
-    assert!(contains_cmi(&node));
+    assert!(contains_attribution(&node));
   }
 
   #[test]
-  fn transform_preserves_cmi_footer_removes_nav() {
+  fn transform_preserves_attribution_footer_removes_nav() {
     let html = r#"<html><body>
       <nav><a href="/home">Home</a><a href="/about">About</a></nav>
       <main><h1>Hello World</h1><p>Content here</p></main>
@@ -1262,7 +1262,7 @@ mod tests {
     })
     .unwrap();
 
-    // Footer with CMI should be preserved
+    // Footer with attribution should be preserved
     assert!(result.contains("© 2024 Test Company"));
     assert!(result.contains("All Rights Reserved"));
 
@@ -1272,7 +1272,7 @@ mod tests {
   }
 
   #[test]
-  fn transform_strips_noise_siblings_keeps_cmi() {
+  fn transform_strips_noise_siblings_keeps_attribution() {
     let html = r#"<html><body>
       <main><h1>Hello World</h1></main>
       <footer>
@@ -1292,7 +1292,7 @@ mod tests {
     })
     .unwrap();
 
-    // CMI div kept
+    // Attribution div kept
     assert!(result.contains("© 2024 Test Company"));
     // Noise siblings removed
     assert!(!result.contains("Twitter"));
@@ -1301,7 +1301,7 @@ mod tests {
   }
 
   #[test]
-  fn transform_strips_nested_noise_keeps_nested_cmi() {
+  fn transform_strips_nested_noise_keeps_nested_attribution() {
     let html = r#"<html><body>
       <main><h1>Content</h1></main>
       <footer>
@@ -1323,7 +1323,7 @@ mod tests {
     })
     .unwrap();
 
-    // Nested CMI kept
+    // Nested attribution kept
     assert!(result.contains("© 2024 Corp"));
     // Nested noise removed
     assert!(!result.contains("Twitter"));
@@ -1331,7 +1331,7 @@ mod tests {
   }
 
   #[test]
-  fn transform_removes_footer_without_cmi() {
+  fn transform_removes_footer_without_attribution() {
     let html = r#"<html><body>
       <main><h1>Hello World</h1></main>
       <footer><a href="/sitemap">Sitemap</a></footer>
@@ -1347,7 +1347,7 @@ mod tests {
     })
     .unwrap();
 
-    // Footer without CMI should be removed
+    // Footer without attribution should be removed
     assert!(!result.contains("Sitemap"));
   }
 

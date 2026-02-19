@@ -9,13 +9,13 @@ let identity: Identity;
 
 beforeAll(async () => {
   identity = await idmux({
-    name: "scrape-cmi",
+    name: "scrape-attribution",
     concurrency: 10,
     credits: 10000,
   });
 }, 10000 + scrapeTimeout);
 
-describe("CMI preservation", () => {
+describe("Attribution preservation", () => {
   const base = TEST_SUITE_WEBSITE;
 
   concurrentIf(ALLOW_TEST_SUITE_WEBSITE)(
@@ -35,7 +35,7 @@ describe("CMI preservation", () => {
   );
 
   concurrentIf(ALLOW_TEST_SUITE_WEBSITE)(
-    "still removes non-CMI navigation elements with onlyMainContent=true",
+    "still removes non-attribution navigation elements with onlyMainContent=true",
     async () => {
       const response = await scrape(
         {
@@ -44,8 +44,6 @@ describe("CMI preservation", () => {
         identity,
       );
 
-      // The test site has navigation links like "Blog", "Playground"
-      // that should be removed by onlyMainContent stripping
       // The main content heading should be present
       expect(response.markdown).toContain("Firecrawl");
 
@@ -56,7 +54,7 @@ describe("CMI preservation", () => {
   );
 
   concurrentIf(ALLOW_TEST_SUITE_WEBSITE)(
-    "preserves all content including CMI with onlyMainContent=false",
+    "preserves all content including attribution with onlyMainContent=false",
     async () => {
       const response = await scrape(
         {

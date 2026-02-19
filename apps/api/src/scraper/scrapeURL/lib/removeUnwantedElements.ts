@@ -66,10 +66,10 @@ const forceIncludeMainTags = [
   ".swoogo-agenda",
 ];
 
-const CMI_TEXT_PATTERN =
+const ATTRIBUTION_TEXT_PATTERN =
   /©|\u00A9|\(c\)\s*\d{4}|Copyright\s+(\(c\)|\d{4})|All\s+Rights\s+Reserved|Creative\s+Commons|creativecommons\.org|CC[\s-]BY([\s-](SA|NC|ND|NC[\s-]SA|NC[\s-]ND))?|CC0|Licensed\s+under|Photo\s+by|Photo\s+credit|Image\s+credit/i;
 
-const CMI_ATTRIBUTE_SELECTOR = [
+const ATTRIBUTION_SELECTOR = [
   'a[rel="license"]',
   'a[href*="creativecommons.org"]',
   '[itemprop="copyrightHolder"]',
@@ -80,28 +80,34 @@ const CMI_ATTRIBUTE_SELECTOR = [
   '[class*="license"]',
 ].join(",");
 
-function containsCMI(soup: ReturnType<typeof load>, el: AnyNode): boolean {
+function containsAttribution(
+  soup: ReturnType<typeof load>,
+  el: AnyNode,
+): boolean {
   const $el = soup(el);
   const text = $el.text();
-  if (CMI_TEXT_PATTERN.test(text)) {
+  if (ATTRIBUTION_TEXT_PATTERN.test(text)) {
     return true;
   }
-  if ($el.find(CMI_ATTRIBUTE_SELECTOR).length > 0) {
+  if ($el.find(ATTRIBUTION_SELECTOR).length > 0) {
     return true;
   }
-  if ($el.is(CMI_ATTRIBUTE_SELECTOR)) {
+  if ($el.is(ATTRIBUTION_SELECTOR)) {
     return true;
   }
   return false;
 }
 
-function stripNonCMIChildren(soup: ReturnType<typeof load>, el: AnyNode): void {
+function stripNonAttributionChildren(
+  soup: ReturnType<typeof load>,
+  el: AnyNode,
+): void {
   soup(el)
     .children()
     .each((_, child) => {
       if (child.type === "tag") {
-        if (containsCMI(soup, child)) {
-          stripNonCMIChildren(soup, child);
+        if (containsAttribution(soup, child)) {
+          stripNonAttributionChildren(soup, child);
         } else {
           soup(child).remove();
         }
@@ -213,8 +219,8 @@ export const htmlTransform = async (
         forceIncludeMainTags.map(x => ":not(:has(" + x + "))").join(""),
       );
       candidates.each((_, el) => {
-        if (containsCMI(soup, el)) {
-          stripNonCMIChildren(soup, el);
+        if (containsAttribution(soup, el)) {
+          stripNonAttributionChildren(soup, el);
         } else {
           soup(el).remove();
         }
