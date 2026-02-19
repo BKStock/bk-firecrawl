@@ -6,6 +6,16 @@ import { processPdf } from "@mendable/firecrawl-rs";
 import { MAX_RUST_FILE_SIZE } from "./types";
 import type { RustExtractionResult } from "./types";
 
+/** Check if the Rust extraction result is usable, returning a rejection reason or null. */
+function getSkipReason(result: ReturnType<typeof processPdf>): string | null {
+  if (result.pdfType !== "TextBased") return `pdfType=${result.pdfType}`;
+  if (result.confidence < 0.95) return `confidence=${result.confidence}`;
+  if (result.isComplex) return "complex layout (tables/columns)";
+  if (!result.markdown?.length)
+    return "empty markdown (unexpected for TextBased)";
+  return null;
+}
+
 export async function scrapePDFWithRust(
   meta: Meta,
   tempFilePath: string,
@@ -35,18 +45,11 @@ export async function scrapePDFWithRust(
       url: meta.rewrittenUrl ?? meta.url,
     });
 
-    if (
-      result.pdfType !== "TextBased" ||
-      result.confidence < 0.95 ||
-      !result.markdown?.length
-    ) {
-      logger.info("Rust extraction not applicable, falling through to MU", {
-        reason:
-          result.pdfType !== "TextBased"
-            ? `pdfType=${result.pdfType}`
-            : result.confidence < 0.95
-              ? `confidence=${result.confidence}`
-              : "empty markdown",
+    const skipReason = getSkipReason(result);
+    if (skipReason) {
+      const level = skipReason.startsWith("empty markdown") ? "warn" : "info";
+      logger[level]("Rust extraction not applicable, falling through to MU", {
+        reason: skipReason,
       });
       // Return metadata (avoids redundant getPdfMetadata call) but no content
       return {

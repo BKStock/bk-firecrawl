@@ -20,6 +20,7 @@ pub struct PdfProcessResult {
   pub pages_needing_ocr: Vec<i32>,
   pub title: Option<String>,
   pub confidence: f64,
+  pub is_complex: bool,
 }
 
 fn pdf_type_str(t: PdfType) -> &'static str {
@@ -70,5 +71,6 @@ pub fn process_pdf(path: String) -> Result<PdfProcessResult> {
     pages_needing_ocr: result.pages_needing_ocr.iter().map(|&p| p as i32).collect(),
     title: result.title,
     confidence: result.confidence as f64,
+    is_complex: result.layout.is_complex,
   })
 }
