@@ -294,6 +294,82 @@ async function _autoChargeScale(
               );
             }
 
+            // Double-write to organization_subscriptions + subscription_prices
+            try {
+              const { data: teamData } = await supabase_service
+                .from("teams")
+                .select("org_id")
+                .eq("id", chunk.team_id)
+                .single();
+
+              if (teamData?.org_id) {
+                // Set organizations.stripe_customer_id if not already set
+                await supabase_service
+                  .from("organizations")
+                  .update({ stripe_customer_id: customer.stripe_customer_id })
+                  .eq("id", teamData.org_id)
+                  .is("stripe_customer_id", null);
+
+                // Upsert organization_subscriptions
+                const { error: orgSubError } = await supabase_service
+                  .from("organization_subscriptions")
+                  .upsert([
+                    {
+                      id: subscription.id,
+                      org_id: teamData.org_id,
+                      status: subscription.status,
+                      metadata: subscription.metadata,
+                      cancel_at_period_end: false,
+                      created: subscription.created
+                        ? new Date(subscription.created * 1000).toISOString()
+                        : new Date().toISOString(),
+                      current_period_start: subscription.current_period_start
+                        ? new Date(
+                            subscription.current_period_start * 1000,
+                          ).toISOString()
+                        : new Date().toISOString(),
+                      current_period_end: subscription.current_period_end
+                        ? new Date(
+                            subscription.current_period_end * 1000,
+                          ).toISOString()
+                        : new Date().toISOString(),
+                      ended_at: null,
+                      cancel_at: null,
+                      canceled_at: null,
+                    },
+                  ]);
+
+                if (
+                  !orgSubError &&
+                  chunk.price_associated_auto_recharge_price_id
+                ) {
+                  // Upsert subscription_prices
+                  await supabase_service.from("subscription_prices").upsert(
+                    [
+                      {
+                        subscription_id: subscription.id,
+                        price_id: chunk.price_associated_auto_recharge_price_id,
+                        quantity: 1,
+                      },
+                    ],
+                    { onConflict: "subscription_id,price_id" },
+                  );
+                }
+
+                logger.info("Double-wrote to organization_subscriptions", {
+                  subscription_id: subscription.id,
+                  org_id: teamData.org_id,
+                });
+              }
+            } catch (orgSubErr) {
+              logger.warn(
+                "Failed to double-write to organization_subscriptions",
+                {
+                  error: orgSubErr,
+                },
+              );
+            }
+
             // Reset ACUC cache to reflect the new credit balance
             await clearACUC(chunk.api_key);
             await clearACUCTeam(chunk.team_id);
