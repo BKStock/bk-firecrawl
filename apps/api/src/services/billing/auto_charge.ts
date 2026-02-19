@@ -356,10 +356,17 @@ async function _autoChargeScale(
                   );
                 }
 
-                logger.info("Double-wrote to organization_subscriptions", {
-                  subscription_id: subscription.id,
-                  org_id: teamData.org_id,
-                });
+                if (orgSubError) {
+                  logger.warn(
+                    "Failed to upsert organization_subscriptions",
+                    { error: orgSubError, subscription_id: subscription.id, org_id: teamData.org_id },
+                  );
+                } else {
+                  logger.info("Double-wrote to organization_subscriptions", {
+                    subscription_id: subscription.id,
+                    org_id: teamData.org_id,
+                  });
+                }
               }
             } catch (orgSubErr) {
               logger.warn(
