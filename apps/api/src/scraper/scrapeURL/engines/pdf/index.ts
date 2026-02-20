@@ -165,12 +165,12 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
         confidence: pdfResult.confidence,
       });
 
-      if (eligible && !config.PDF_RUST_EXTRACT_DISABLE && pdfResult.markdown) {
+      if (eligible && config.PDF_RUST_EXTRACT_ENABLE && pdfResult.markdown) {
         const html = await marked.parse(pdfResult.markdown, { async: true });
         result = { markdown: pdfResult.markdown, html };
-      } else if (eligible && config.PDF_RUST_EXTRACT_DISABLE) {
+      } else if (eligible && !config.PDF_RUST_EXTRACT_ENABLE) {
         logger.info(
-          "Rust PDF eligible but disabled via PDF_RUST_EXTRACT_DISABLE",
+          "Rust PDF eligible but not enabled (set PDF_RUST_EXTRACT_ENABLE=true to use)",
           { url: meta.rewrittenUrl ?? meta.url },
         );
       }
