@@ -2,6 +2,7 @@ import { Meta } from "../..";
 import { config } from "../../../../config";
 import { EngineScrapeResult } from "..";
 import * as Sentry from "@sentry/node";
+import * as marked from "marked";
 import { downloadFile, fetchFileToBuffer } from "../utils/downloadFile";
 import {
   PDFAntibotError,
@@ -17,12 +18,23 @@ import {
   shouldParsePDF,
   getPDFMaxPages,
 } from "../../../../controllers/v2/types";
-import { getPdfMetadata } from "@mendable/firecrawl-rs";
+import { processPdf } from "@mendable/firecrawl-rs";
 import { MAX_FILE_SIZE, MILLISECONDS_PER_PAGE } from "./types";
-import type { PDFProcessorResult, RustExtractionResult } from "./types";
+import type { PDFProcessorResult } from "./types";
 import { scrapePDFWithRunPodMU } from "./runpodMU";
-import { scrapePDFWithRust } from "./rustExtract";
 import { scrapePDFWithParsePDF } from "./pdfParse";
+
+/** Check if the PDF is eligible for Rust extraction, returning a rejection reason or null. */
+function getIneligibleReason(
+  result: ReturnType<typeof processPdf>,
+): string | null {
+  if (result.pdfType !== "TextBased") return `pdfType=${result.pdfType}`;
+  if (result.confidence < 0.95) return `confidence=${result.confidence}`;
+  if (result.isComplex) return "complex layout (tables/columns)";
+  if (!result.markdown?.length)
+    return "empty markdown (unexpected for TextBased)";
+  return null;
+}
 
 export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
   const shouldParse = shouldParsePDF(meta.options.parsers);
@@ -114,43 +126,68 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
     }
 
     let result: PDFProcessorResult | null = null;
-    let effectivePageCount: number;
-    let metadataTitle: string | null | undefined;
+    let effectivePageCount: number = 0;
+    let metadataTitle: string | undefined;
 
-    // Rust extraction feature flag: enabled + percentage roll
-    const rustSelected =
-      config.PDF_RUST_EXTRACT &&
-      Math.random() * 100 < config.PDF_RUST_EXTRACT_PERCENT;
-    const shadow = rustSelected && !!config.PDF_RUST_EXTRACT_SHADOW;
+    // 1. Always call processPdf to get type, complexity, metadata, and markdown
+    const logger = meta.logger.child({ method: "scrapePDF/processPdf" });
+    try {
+      const startedAt = Date.now();
+      const pdfResult = processPdf(tempFilePath);
+      const durationMs = Date.now() - startedAt;
 
-    // 1. Try Rust extraction (if feature-flagged)
-    // processPdf does detection + extraction in one pass, so we get metadata for free
-    let rustResult: RustExtractionResult | null = null;
-    if (rustSelected) {
-      rustResult = await scrapePDFWithRust(meta, tempFilePath);
-      if (!shadow && rustResult?.content) {
-        result = rustResult.content;
+      logger.info("processPdf completed", {
+        durationMs,
+        pdfType: pdfResult.pdfType,
+        pageCount: pdfResult.pageCount,
+        confidence: pdfResult.confidence,
+        isComplex: pdfResult.isComplex,
+        markdownLength: pdfResult.markdown?.length ?? 0,
+        url: meta.rewrittenUrl ?? meta.url,
+      });
+
+      effectivePageCount = maxPages
+        ? Math.min(pdfResult.pageCount, maxPages)
+        : pdfResult.pageCount;
+      metadataTitle = pdfResult.title ?? undefined;
+
+      // 2. Check eligibility for Rust-extracted markdown
+      const ineligibleReason = getIneligibleReason(pdfResult);
+      const eligible = !ineligibleReason;
+
+      logger.info("Rust PDF eligibility", {
+        rust_pdf_eligible: eligible,
+        reason: ineligibleReason ?? "eligible",
+        url: meta.rewrittenUrl ?? meta.url,
+        pdfType: pdfResult.pdfType,
+        isComplex: pdfResult.isComplex,
+        pageCount: pdfResult.pageCount,
+        confidence: pdfResult.confidence,
+      });
+
+      if (eligible && !config.PDF_RUST_EXTRACT_DISABLE && pdfResult.markdown) {
+        const html = await marked.parse(pdfResult.markdown, { async: true });
+        result = { markdown: pdfResult.markdown, html };
+      } else if (eligible && config.PDF_RUST_EXTRACT_DISABLE) {
+        logger.info(
+          "Rust PDF eligible but disabled via PDF_RUST_EXTRACT_DISABLE",
+          { url: meta.rewrittenUrl ?? meta.url },
+        );
       }
-    }
-
-    // 2. Get metadata: reuse from Rust result, or call getPdfMetadata
-    if (rustResult) {
-      effectivePageCount = maxPages
-        ? Math.min(rustResult.pageCount, maxPages)
-        : rustResult.pageCount;
-      metadataTitle = rustResult.title;
-    } else {
-      const pdfMetadata = getPdfMetadata(tempFilePath);
-      effectivePageCount = maxPages
-        ? Math.min(pdfMetadata.numPages, maxPages)
-        : pdfMetadata.numPages;
-      metadataTitle = pdfMetadata.title;
+    } catch (error) {
+      logger.warn("processPdf failed, falling back to MU/PdfParse", {
+        error,
+        url: meta.rewrittenUrl ?? meta.url,
+      });
+      Sentry.captureException(error);
+      // effectivePageCount stays 0 — skip time budget check
     }
 
     // Only enforce the per-page time budget when we need MU/fallback.
     // Rust extraction is fast enough that the constraint doesn't apply.
     if (
       !result &&
+      effectivePageCount > 0 &&
       effectivePageCount * MILLISECONDS_PER_PAGE >
         (meta.abort.scrapeTimeout() ?? Infinity)
     ) {
@@ -227,18 +264,6 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
           tempFilePath,
         );
       }
-
-      // Shadow comparison: log both Rust and MU results
-      if (shadow && rustSelected) {
-        meta.logger
-          .child({ method: "scrapePDF/rustShadow" })
-          .info("Rust shadow comparison", {
-            rustSuccess: rustResult !== null,
-            rustMarkdownLength: rustResult?.content?.markdown?.length ?? 0,
-            muMarkdownLength: result?.markdown?.length ?? 0,
-            url: meta.rewrittenUrl ?? meta.url,
-          });
-      }
     }
 
     return {
@@ -248,7 +273,7 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
       markdown: result?.markdown ?? "",
       pdfMetadata: {
         numPages: effectivePageCount,
-        title: metadataTitle ?? undefined,
+        title: metadataTitle,
       },
 
       proxyUsed: "basic",

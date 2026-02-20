@@ -1,15 +1,6 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use pdf_inspector::{PdfType, process_pdf as rust_process_pdf};
-use serde::Serialize;
-
-#[derive(Debug, Clone, Serialize)]
-#[napi(object)]
-pub struct PDFMetadata {
-  pub num_pages: i32,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub title: Option<String>,
-}
 
 #[napi(object)]
 pub struct PdfProcessResult {
@@ -30,27 +21,6 @@ fn pdf_type_str(t: PdfType) -> &'static str {
     PdfType::ImageBased => "ImageBased",
     PdfType::Mixed => "Mixed",
   }
-}
-
-fn _get_pdf_metadata(path: &str) -> std::result::Result<PDFMetadata, String> {
-  let detection = pdf_inspector::detect_pdf_type(path)
-    .map_err(|e| format!("Failed to detect PDF type: {}", e))?;
-
-  Ok(PDFMetadata {
-    num_pages: detection.page_count as i32,
-    title: detection.title,
-  })
-}
-
-/// Extract metadata from PDF file.
-#[napi]
-pub fn get_pdf_metadata(path: String) -> Result<PDFMetadata> {
-  _get_pdf_metadata(&path).map_err(|e| {
-    Error::new(
-      Status::GenericFailure,
-      format!("Failed to get PDF metadata: {e}"),
-    )
-  })
 }
 
 /// Process a PDF file: detect type, extract text + markdown if text-based.
