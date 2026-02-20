@@ -29,6 +29,7 @@ import { getSearchIndexClient } from "../../lib/search-index-client";
 // import { processSearchIndexJobs } from "../../lib/search-index/queue";
 import { processWebhookInsertJobs } from "../webhook";
 import { processBrowserSessionActivityJobs } from "../../lib/browser-session-activity";
+import { reapExpiredBrowserSessions } from "../../controllers/v2/browser";
 import {
   scrapeOptions as scrapeOptionsSchema,
   crawlRequestSchema,
@@ -685,6 +686,7 @@ const INDEX_INSERT_INTERVAL = 3000;
 const WEBHOOK_INSERT_INTERVAL = 15000;
 const OMCE_INSERT_INTERVAL = 5000;
 const BROWSER_ACTIVITY_INSERT_INTERVAL = 10000;
+const BROWSER_REAPER_INTERVAL = 60_000; // every 60 seconds
 // Search indexing is now handled by separate search service, not this worker
 // const SEARCH_INDEX_INTERVAL = 10000;
 
@@ -730,6 +732,15 @@ const BROWSER_ACTIVITY_INSERT_INTERVAL = 10000;
     if (isShuttingDown) return;
     await processBrowserSessionActivityJobs();
   }, BROWSER_ACTIVITY_INSERT_INTERVAL);
+
+  const browserReaperInterval = setInterval(async () => {
+    if (isShuttingDown) return;
+    try {
+      await reapExpiredBrowserSessions();
+    } catch (err) {
+      logger.error("Browser reaper failed", { error: err });
+    }
+  }, BROWSER_REAPER_INTERVAL);
 
   const omceInserterInterval = setInterval(async () => {
     if (isShuttingDown) {
@@ -801,6 +812,7 @@ const BROWSER_ACTIVITY_INSERT_INTERVAL = 10000;
   clearInterval(indexInserterInterval);
   clearInterval(webhookInserterInterval);
   clearInterval(browserActivityInterval);
+  clearInterval(browserReaperInterval);
   clearInterval(omceInserterInterval);
   clearInterval(billingTallyInterval);
 

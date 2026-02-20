@@ -261,3 +261,48 @@ export async function invalidateActiveBrowserSessionCount(
     // Redis down — non-fatal
   }
 }
+
+// ---------------------------------------------------------------------------
+// Reaper: find sessions that exceeded their TTL
+// ---------------------------------------------------------------------------
+
+const REAPER_GRACE_PERIOD_MS = 60_000; // 60s grace before reaping
+
+/**
+ * Returns active sessions that have exceeded their total TTL or their
+ * activity TTL. Used by the periodic reaper to clean up sessions the
+ * browser service failed to destroy.
+ */
+export async function getExpiredBrowserSessions(): Promise<
+  BrowserSessionRow[]
+> {
+  const { data, error } = await supabase_service
+    .from(TABLE)
+    .select("*")
+    .eq("status", "active");
+
+  if (error) {
+    logger.error("Failed to query active browser sessions for reaper", {
+      error,
+    });
+    return [];
+  }
+
+  const now = Date.now();
+
+  return ((data ?? []) as BrowserSessionRow[]).filter(s => {
+    const createdMs = new Date(s.created_at).getTime();
+    const updatedMs = new Date(s.updated_at).getTime();
+
+    // Exceeded total TTL?
+    const totalTtlExpired =
+      now - createdMs > s.ttl_total * 1000 + REAPER_GRACE_PERIOD_MS;
+
+    // Exceeded activity/idle TTL?
+    const idleTtlExpired =
+      s.ttl_without_activity !== null &&
+      now - updatedMs > s.ttl_without_activity * 1000 + REAPER_GRACE_PERIOD_MS;
+
+    return totalTtlExpired || idleTtlExpired;
+  });
+}

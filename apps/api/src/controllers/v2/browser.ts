@@ -14,6 +14,7 @@ import {
   claimBrowserSessionDestroyed,
   getActiveBrowserSessionCount,
   invalidateActiveBrowserSessionCount,
+  getExpiredBrowserSessions,
   MAX_ACTIVE_BROWSER_SESSIONS_PER_TEAM,
 } from "../../lib/browser-sessions";
 import { RequestWithAuth } from "./types";
@@ -253,7 +254,7 @@ export async function browserCreateController(
         error: err,
       });
       if (attempt < MAX_CREATE_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+        await new Promise(resolve => setTimeout(resolve, 200 * attempt));
       }
     }
   }
@@ -384,7 +385,6 @@ export async function browserExecuteController(
 
   logger.info("Executing code in browser session", { language, timeout });
 
-
   // Execute code via the browser service
   let execResult: BrowserServiceExecResponse;
   try {
@@ -426,9 +426,7 @@ export async function browserExecuteController(
     stderr: execResult.stderr,
     exitCode: execResult.exitCode,
     killed: execResult.killed,
-    ...(hasError
-      ? { error: execResult.stderr || "Execution failed" }
-      : {}),
+    ...(hasError ? { error: execResult.stderr || "Execution failed" } : {}),
   });
 }
 
@@ -502,11 +500,10 @@ export async function browserDeleteController(
   }
 
   const durationMs =
-    sessionDurationMs ??
-    Date.now() - new Date(session.created_at).getTime();
+    sessionDurationMs ?? Date.now() - new Date(session.created_at).getTime();
   const creditsBilled = calculateBrowserSessionCredits(durationMs);
 
-  updateBrowserSessionCreditsUsed(session.id, creditsBilled).catch((error) => {
+  updateBrowserSessionCreditsUsed(session.id, creditsBilled).catch(error => {
     logger.error("Failed to update credits_used on browser session", {
       error,
       sessionId: session.id,
@@ -519,7 +516,7 @@ export async function browserDeleteController(
     req.acuc?.sub_id ?? undefined,
     creditsBilled,
     req.acuc?.api_key_id ?? null,
-  ).catch((error) => {
+  ).catch(error => {
     logger.error("Failed to bill team for browser session", {
       error,
       creditsBilled,
@@ -568,7 +565,7 @@ export async function browserListController(
 
   return res.status(200).json({
     success: true,
-    sessions: rows.map((r) => ({
+    sessions: rows.map(r => ({
       id: r.id,
       status: r.status,
       cdpUrl: r.cdp_url,
@@ -628,12 +625,15 @@ export async function browserWebhookDestroyedController(
   const durationMs = Date.now() - new Date(session.created_at).getTime();
   const creditsBilled = calculateBrowserSessionCredits(durationMs);
 
-  updateBrowserSessionCreditsUsed(session.id, creditsBilled).catch((error) => {
-    logger.error("Failed to update credits_used on browser session via webhook", {
-      error,
-      sessionId: session.id,
-      creditsBilled,
-    });
+  updateBrowserSessionCreditsUsed(session.id, creditsBilled).catch(error => {
+    logger.error(
+      "Failed to update credits_used on browser session via webhook",
+      {
+        error,
+        sessionId: session.id,
+        creditsBilled,
+      },
+    );
   });
 
   billTeam(
@@ -641,7 +641,7 @@ export async function browserWebhookDestroyedController(
     undefined, // subscription_id — billTeam will look it up
     creditsBilled,
     null, // api_key_id not available in webhook context
-  ).catch((error) => {
+  ).catch(error => {
     logger.error("Failed to bill team for browser session via webhook", {
       error,
       teamId: session.team_id,
@@ -659,4 +659,91 @@ export async function browserWebhookDestroyedController(
   });
 
   return res.status(200).json({ ok: true });
+}
+
+// ---------------------------------------------------------------------------
+// Reaper – periodic cleanup of expired sessions
+// ---------------------------------------------------------------------------
+
+/**
+ * Scans for active browser sessions that have exceeded their TTL or idle
+ * timeout and force-destroys them. Acts as a safety net when the browser
+ * service fails to send the destruction webhook.
+ *
+ * Called periodically from the index-worker.
+ */
+export async function reapExpiredBrowserSessions(): Promise<void> {
+  const logger = _logger.child({
+    module: "browser-reaper",
+    method: "reapExpiredBrowserSessions",
+  });
+
+  let expired: Awaited<ReturnType<typeof getExpiredBrowserSessions>>;
+  try {
+    expired = await getExpiredBrowserSessions();
+  } catch (err) {
+    logger.error("Reaper failed to query expired sessions", { error: err });
+    return;
+  }
+
+  if (expired.length === 0) return;
+
+  logger.info("Reaper found expired browser sessions", {
+    count: expired.length,
+  });
+
+  for (const session of expired) {
+    // Best-effort: tell the browser service to tear down (may already be gone)
+    try {
+      await browserServiceRequest("DELETE", `/browsers/${session.browser_id}`);
+    } catch {
+      // Browser service may have already cleaned up — that's fine
+    }
+
+    const claimed = await claimBrowserSessionDestroyed(session.id);
+
+    invalidateActiveBrowserSessionCount(session.team_id).catch(() => {});
+
+    if (!claimed) {
+      // Already destroyed by webhook or explicit DELETE while we were iterating
+      continue;
+    }
+
+    // Bill only up to the intended TTL, not the full stuck duration
+    const actualDurationMs =
+      Date.now() - new Date(session.created_at).getTime();
+    const billedDurationMs = Math.min(
+      actualDurationMs,
+      session.ttl_total * 1000,
+    );
+    const creditsBilled = calculateBrowserSessionCredits(billedDurationMs);
+
+    updateBrowserSessionCreditsUsed(session.id, creditsBilled).catch(error => {
+      logger.error("Reaper: failed to update credits_used", {
+        error,
+        sessionId: session.id,
+        creditsBilled,
+      });
+    });
+
+    billTeam(session.team_id, undefined, creditsBilled, null).catch(error => {
+      logger.error("Reaper: failed to bill team", {
+        error,
+        teamId: session.team_id,
+        sessionId: session.id,
+        creditsBilled,
+      });
+    });
+
+    logger.info("Reaper destroyed expired browser session", {
+      sessionId: session.id,
+      browserId: session.browser_id,
+      teamId: session.team_id,
+      ttlTotal: session.ttl_total,
+      ttlWithoutActivity: session.ttl_without_activity,
+      actualDurationMs,
+      billedDurationMs,
+      creditsBilled,
+    });
+  }
 }
