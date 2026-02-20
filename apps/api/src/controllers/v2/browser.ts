@@ -21,6 +21,7 @@ import { RequestWithAuth } from "./types";
 import { billTeam } from "../../services/billing/credit_billing";
 import { enqueueBrowserSessionActivity } from "../../lib/browser-session-activity";
 import { logRequest } from "../../services/logging/log_job";
+import { getRedisConnection } from "../../services/queue-service";
 
 const BROWSER_CREDITS_PER_HOUR = 100;
 
@@ -665,10 +666,16 @@ export async function browserWebhookDestroyedController(
 // Reaper – periodic cleanup of expired sessions
 // ---------------------------------------------------------------------------
 
+const BROWSER_REAPER_LOCK_KEY = "browser-session-reaper:lock";
+const BROWSER_REAPER_LOCK_TTL_SECONDS = 55; // slightly less than the 60s interval
+
 /**
  * Scans for active browser sessions that have exceeded their TTL or idle
  * timeout and force-destroys them. Acts as a safety net when the browser
  * service fails to send the destruction webhook.
+ *
+ * Uses a Redis distributed lock so only one index-worker replica runs the
+ * reaper per cycle (production runs 50 replicas).
  *
  * Called periodically from the index-worker.
  */
@@ -677,6 +684,16 @@ export async function reapExpiredBrowserSessions(): Promise<void> {
     module: "browser-reaper",
     method: "reapExpiredBrowserSessions",
   });
+
+  // Distributed lock: only one replica should run the reaper per cycle
+  const acquired = await getRedisConnection().set(
+    BROWSER_REAPER_LOCK_KEY,
+    "1",
+    "EX",
+    BROWSER_REAPER_LOCK_TTL_SECONDS,
+    "NX",
+  );
+  if (!acquired) return;
 
   let expired: Awaited<ReturnType<typeof getExpiredBrowserSessions>>;
   try {
