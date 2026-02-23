@@ -220,6 +220,9 @@ async function scrapePDFWithRunPodMU(
     captureExceptionWithZdrCheck(err, {
       extra: {
         zeroDataRetention: meta.internalOptions.zeroDataRetention ?? false,
+        scrapeId: meta.id,
+        teamId: meta.internalOptions.teamId,
+        url: meta.rewrittenUrl ?? meta.url,
         runpodId: podStart.id,
         runpodError: lastRunPodError,
         durationMs,
