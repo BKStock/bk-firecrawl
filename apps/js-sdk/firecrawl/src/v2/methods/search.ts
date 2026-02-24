@@ -13,6 +13,7 @@ function prepareSearchPayload(req: SearchRequest): Record<string, unknown> {
   if (req.sources) payload.sources = req.sources;
   if (req.categories) payload.categories = req.categories;
   if (req.limit != null) payload.limit = req.limit;
+  if (req.sort != null) payload.sort = req.sort;
   if (req.tbs != null) payload.tbs = req.tbs;
   if (req.location != null) payload.location = req.location;
   if (req.ignoreInvalidURLs != null) payload.ignoreInvalidURLs = req.ignoreInvalidURLs;

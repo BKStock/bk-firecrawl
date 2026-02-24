@@ -123,6 +123,11 @@ def _validate_search_request(request: SearchRequest) -> SearchRequest:
         if not isinstance(request.location, str) or len(request.location.strip()) == 0:
             raise ValueError("Location must be a non-empty string")
 
+    if request.sort is not None:
+        valid_sort_values = {"relevance", "recency"}
+        if request.sort not in valid_sort_values:
+            raise ValueError(f"Invalid sort value: {request.sort}. Valid values: {valid_sort_values}")
+
     if request.tbs is not None:
         valid_tbs_values = {
             "qdr:h", "qdr:d", "qdr:w", "qdr:m", "qdr:y",

@@ -1034,6 +1034,7 @@ class SearchRequest(BaseModel):
     sources: Optional[List[SourceOption]] = None
     categories: Optional[List[CategoryOption]] = None
     limit: Optional[int] = 5
+    sort: Optional[str] = None
     tbs: Optional[str] = None
     location: Optional[str] = None
     ignore_invalid_urls: Optional[bool] = None

@@ -1581,6 +1581,7 @@ export const searchRequestSchema = z
   .strictObject({
     query: z.string(),
     limit: z.int().positive().finite().max(100).optional().prefault(10),
+    sort: z.enum(["relevance", "recency"]).optional(),
     tbs: z.string().optional(),
     filter: z.string().optional(),
     sources: z
@@ -1668,6 +1669,10 @@ export const searchRequestSchema = z
     const country =
       x.country !== undefined ? x.country : x.location ? undefined : "us";
 
+    // Merge sort=recency into tbs
+    const tbs =
+      x.sort === "recency" ? (x.tbs ? `sbd:1,${x.tbs}` : "sbd:1") : x.tbs;
+
     // Transform string array sources to object format
     let sources = x.sources;
     if (sources && Array.isArray(sources) && sources.length > 0) {
@@ -1679,7 +1684,7 @@ export const searchRequestSchema = z
             case "web":
               return {
                 type: "web" as const,
-                tbs: x.tbs,
+                tbs,
                 filter: x.filter,
                 lang: x.lang,
                 country,
@@ -1693,7 +1698,7 @@ export const searchRequestSchema = z
             case "news":
               return {
                 type: "news" as const,
-                tbs: x.tbs,
+                tbs,
                 lang: x.lang,
                 country,
                 location: x.location,
@@ -1736,6 +1741,7 @@ export const searchRequestSchema = z
 
     return {
       ...x,
+      tbs,
       country,
       sources,
       categories,

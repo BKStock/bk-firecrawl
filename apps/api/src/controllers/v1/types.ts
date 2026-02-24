@@ -1492,6 +1492,7 @@ export const searchRequestSchema = z
   .strictObject({
     query: z.string(),
     limit: z.int().positive().finite().max(100).optional().prefault(5),
+    sort: z.enum(["relevance", "recency"]).optional(),
     tbs: z.string().optional(),
     filter: z.string().optional(),
     lang: z.string().optional().prefault("en"),
@@ -1526,6 +1527,7 @@ export const searchRequestSchema = z
   .refine(x => waitForRefine(x.scrapeOptions), waitForRefineOpts)
   .transform(x => ({
     ...x,
+    tbs: x.sort === "recency" ? (x.tbs ? `sbd:1,${x.tbs}` : "sbd:1") : x.tbs,
     country:
       x.country !== undefined ? x.country : x.location ? undefined : "us",
     scrapeOptions: extractTransform(x.scrapeOptions),

@@ -447,6 +447,7 @@ export interface SearchRequest {
   >;
   categories?: Array<'github' | 'research' | 'pdf' | CategoryOption>;
   limit?: number;
+  sort?: 'relevance' | 'recency';
   tbs?: string;
   location?: string;
   ignoreInvalidURLs?: boolean;
