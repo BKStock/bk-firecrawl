@@ -471,6 +471,7 @@ export interface CrawlOptions {
   maxConcurrency?: number | null;
   webhook?: string | WebhookConfig | null;
   scrapeOptions?: ScrapeOptions | null;
+  regexOnFullURL?: boolean;
   zeroDataRetention?: boolean;
   integration?: string;
 }
