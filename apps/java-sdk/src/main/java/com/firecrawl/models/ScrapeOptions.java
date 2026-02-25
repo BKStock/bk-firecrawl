@@ -2,6 +2,9 @@ package com.firecrawl.models;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -56,16 +59,16 @@ public class ScrapeOptions {
 
     public Builder toBuilder() {
         Builder b = new Builder();
-        b.formats = this.formats;
-        b.headers = this.headers;
-        b.includeTags = this.includeTags;
-        b.excludeTags = this.excludeTags;
+        b.formats = this.formats != null ? new ArrayList<>(this.formats) : null;
+        b.headers = this.headers != null ? new HashMap<>(this.headers) : null;
+        b.includeTags = this.includeTags != null ? new ArrayList<>(this.includeTags) : null;
+        b.excludeTags = this.excludeTags != null ? new ArrayList<>(this.excludeTags) : null;
         b.onlyMainContent = this.onlyMainContent;
         b.timeout = this.timeout;
         b.waitFor = this.waitFor;
         b.mobile = this.mobile;
-        b.parsers = this.parsers;
-        b.actions = this.actions;
+        b.parsers = this.parsers != null ? new ArrayList<>(this.parsers) : null;
+        b.actions = this.actions != null ? new ArrayList<>(this.actions) : null;
         b.location = this.location;
         b.skipTlsVerification = this.skipTlsVerification;
         b.removeBase64Images = this.removeBase64Images;
@@ -159,16 +162,16 @@ public class ScrapeOptions {
 
         public ScrapeOptions build() {
             ScrapeOptions o = new ScrapeOptions();
-            o.formats = this.formats;
-            o.headers = this.headers;
-            o.includeTags = this.includeTags;
-            o.excludeTags = this.excludeTags;
+            o.formats = this.formats != null ? Collections.unmodifiableList(new ArrayList<>(this.formats)) : null;
+            o.headers = this.headers != null ? Collections.unmodifiableMap(new HashMap<>(this.headers)) : null;
+            o.includeTags = this.includeTags != null ? Collections.unmodifiableList(new ArrayList<>(this.includeTags)) : null;
+            o.excludeTags = this.excludeTags != null ? Collections.unmodifiableList(new ArrayList<>(this.excludeTags)) : null;
             o.onlyMainContent = this.onlyMainContent;
             o.timeout = this.timeout;
             o.waitFor = this.waitFor;
             o.mobile = this.mobile;
-            o.parsers = this.parsers;
-            o.actions = this.actions;
+            o.parsers = this.parsers != null ? Collections.unmodifiableList(new ArrayList<>(this.parsers)) : null;
+            o.actions = this.actions != null ? Collections.unmodifiableList(new ArrayList<>(this.actions)) : null;
             o.location = this.location;
             o.skipTlsVerification = this.skipTlsVerification;
             o.removeBase64Images = this.removeBase64Images;

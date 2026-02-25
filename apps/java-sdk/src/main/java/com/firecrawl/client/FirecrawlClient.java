@@ -60,9 +60,9 @@ public class FirecrawlClient {
      */
     public static FirecrawlClient fromEnv() {
         String apiKey = System.getenv("FIRECRAWL_API_KEY");
-        if (apiKey == null || apiKey.isEmpty()) {
+        if (apiKey == null || apiKey.isBlank()) {
             String sysProp = System.getProperty("firecrawl.apiKey");
-            if (sysProp == null || sysProp.isEmpty()) {
+            if (sysProp == null || sysProp.isBlank()) {
                 throw new FirecrawlException("FIRECRAWL_API_KEY environment variable or firecrawl.apiKey system property is required");
             }
             apiKey = sysProp;
@@ -589,6 +589,9 @@ public class FirecrawlClient {
      * Auto-paginates crawl results by following the "next" cursor.
      */
     private CrawlJob paginateCrawl(CrawlJob job) {
+        if (job.getData() == null) {
+            job.setData(new ArrayList<>());
+        }
         CrawlJob current = job;
         while (current.getNext() != null && !current.getNext().isEmpty()) {
             CrawlJob nextPage = http.getAbsolute(current.getNext(), CrawlJob.class);
@@ -604,6 +607,9 @@ public class FirecrawlClient {
      * Auto-paginates batch scrape results by following the "next" cursor.
      */
     private BatchScrapeJob paginateBatchScrape(BatchScrapeJob job) {
+        if (job.getData() == null) {
+            job.setData(new ArrayList<>());
+        }
         BatchScrapeJob current = job;
         while (current.getNext() != null && !current.getNext().isEmpty()) {
             BatchScrapeJob nextPage = http.getAbsolute(current.getNext(), BatchScrapeJob.class);
@@ -717,13 +723,13 @@ public class FirecrawlClient {
 
         public FirecrawlClient build() {
             String resolvedKey = apiKey;
-            if (resolvedKey == null || resolvedKey.isEmpty()) {
+            if (resolvedKey == null || resolvedKey.isBlank()) {
                 resolvedKey = System.getenv("FIRECRAWL_API_KEY");
             }
-            if (resolvedKey == null || resolvedKey.isEmpty()) {
+            if (resolvedKey == null || resolvedKey.isBlank()) {
                 resolvedKey = System.getProperty("firecrawl.apiKey");
             }
-            if (resolvedKey == null || resolvedKey.isEmpty()) {
+            if (resolvedKey == null || resolvedKey.isBlank()) {
                 throw new FirecrawlException(
                         "API key is required. Set it via builder.apiKey(), " +
                         "FIRECRAWL_API_KEY environment variable, or firecrawl.apiKey system property.");

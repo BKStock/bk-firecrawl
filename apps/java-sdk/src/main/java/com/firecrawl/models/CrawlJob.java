@@ -26,6 +26,7 @@ public class CrawlJob {
     public String getExpiresAt() { return expiresAt; }
     public String getNext() { return next; }
     public List<Document> getData() { return data; }
+    public void setData(List<Document> data) { this.data = data; }
 
     /** Returns true if the job has finished (completed, failed, or cancelled). */
     public boolean isDone() {

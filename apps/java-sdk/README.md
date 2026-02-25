@@ -38,14 +38,10 @@ import com.firecrawl.client.FirecrawlClient;
 import com.firecrawl.models.*;
 import java.util.List;
 
-// Create client
+// Create client with explicit API key
 FirecrawlClient client = FirecrawlClient.builder()
     .apiKey("fc-your-api-key")
     .build();
-
-// Or use environment variable
-// export FIRECRAWL_API_KEY=fc-your-api-key
-FirecrawlClient client = FirecrawlClient.fromEnv();
 
 // Scrape a page
 Document doc = client.scrape("https://example.com",
@@ -54,6 +50,13 @@ Document doc = client.scrape("https://example.com",
         .build());
 
 System.out.println(doc.getMarkdown());
+```
+
+Or create a client from the environment variable:
+
+```java
+// export FIRECRAWL_API_KEY=fc-your-api-key
+FirecrawlClient client = FirecrawlClient.fromEnv();
 ```
 
 ## API Reference
@@ -129,7 +132,7 @@ System.out.println("Job started: " + start.getId());
 // Poll manually
 CrawlJob status;
 do {
-    Thread.sleep(2000);
+    try { Thread.sleep(2000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
     status = client.getCrawlStatus(start.getId());
     System.out.println(status.getCompleted() + "/" + status.getTotal());
 } while (!status.isDone());

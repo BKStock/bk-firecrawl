@@ -26,6 +26,7 @@ public class BatchScrapeJob {
     public String getExpiresAt() { return expiresAt; }
     public String getNext() { return next; }
     public List<Document> getData() { return data; }
+    public void setData(List<Document> data) { this.data = data; }
 
     public boolean isDone() {
         return "completed".equals(status) || "failed".equals(status) || "cancelled".equals(status);
