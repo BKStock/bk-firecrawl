@@ -34,6 +34,29 @@ const DEFAULT_RESEARCH_SITES = [
 ];
 
 /**
+ * Normalizes `site:` operators in a query string by stripping
+ * http(s):// prefixes and trailing paths, leaving only the hostname.
+ * e.g. "site:https://example.com/path" → "site:example.com"
+ */
+export function normalizeSiteOperators(query: string): string {
+  return query.replace(/site:(\S+)/gi, (_match, value: string) => {
+    try {
+      // If the value has a protocol, parse it as a URL to extract the hostname
+      if (/^https?:\/\//i.test(value)) {
+        const url = new URL(value);
+        return `site:${url.hostname}`;
+      }
+      // No protocol — strip any trailing path (everything after the first `/`)
+      const hostname = value.split("/")[0];
+      return `site:${hostname}`;
+    } catch {
+      // If URL parsing fails, strip trailing path as a best-effort fallback
+      return `site:${value.split("/")[0]}`;
+    }
+  });
+}
+
+/**
  * Builds a search query with category filters
  * @param baseQuery The base search query
  * @param categories Optional array of categories to filter by
@@ -44,10 +67,11 @@ export function buildSearchQuery(
   categories?: CategoryOption[],
 ): QueryBuilderResult {
   const categoryMap = new Map<string, string>();
+  const normalizedQuery = normalizeSiteOperators(baseQuery);
 
   if (!categories || categories.length === 0) {
     return {
-      query: baseQuery,
+      query: normalizedQuery,
       categoryMap,
     };
   }
@@ -102,7 +126,7 @@ export function buildSearchQuery(
   }
 
   return {
-    query: baseQuery + categoryFilter,
+    query: normalizedQuery + categoryFilter,
     categoryMap,
   };
 }
@@ -135,7 +159,7 @@ export function getCategoryFromUrl(
     // Check against category map for other sites
     for (const [site, category] of categoryMap.entries()) {
       if (site === "__pdf__") continue; // Skip the special PDF marker
-      
+
       if (
         hostname === site.toLowerCase() ||
         hostname.endsWith("." + site.toLowerCase())
