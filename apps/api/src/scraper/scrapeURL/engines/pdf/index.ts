@@ -7,6 +7,7 @@ import { downloadFile, fetchFileToBuffer } from "../utils/downloadFile";
 import {
   PDFAntibotError,
   PDFInsufficientTimeError,
+  PDFOCRRequiredError,
   PDFPrefetchFailed,
   RemoveFeatureError,
   EngineUnsuccessfulError,
@@ -201,11 +202,24 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
           mode,
         });
 
+        // In fast mode, if the PDF requires OCR, fail immediately with a
+        // clear error instead of returning empty content.
+        if (
+          mode === "fast" &&
+          (pdfResult.pdfType === "Scanned" ||
+            pdfResult.pdfType === "ImageBased")
+        ) {
+          throw new PDFOCRRequiredError(pdfResult.pdfType);
+        }
+
         if (eligible && pdfResult.markdown) {
           const html = await marked.parse(pdfResult.markdown, { async: true });
           result = { markdown: pdfResult.markdown, html };
         }
       } catch (error) {
+        if (error instanceof PDFOCRRequiredError) {
+          throw error;
+        }
         logger.warn("processPdf failed, falling back to MU/PdfParse", {
           error,
           url: meta.rewrittenUrl ?? meta.url,
