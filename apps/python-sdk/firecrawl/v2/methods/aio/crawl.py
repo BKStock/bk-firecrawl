@@ -51,6 +51,7 @@ def _prepare_crawl_request(request: CrawlRequest) -> dict:
         "allow_subdomains": "allowSubdomains",
         "delay": "delay",
         "max_concurrency": "maxConcurrency",
+        "regex_on_full_url": "regexOnFullURL",
         "zero_data_retention": "zeroDataRetention",
     }
     for snake, camel in field_mappings.items():
