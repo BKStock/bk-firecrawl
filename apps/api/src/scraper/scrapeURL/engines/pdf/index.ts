@@ -165,6 +165,10 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
         confidence: pdfResult.confidence,
       });
 
+      console.log("pdfResult", ineligibleReason);
+
+      console.log("pdfResult.markdown", pdfResult.markdown);
+
       if (eligible && config.PDF_RUST_EXTRACT_ENABLE && pdfResult.markdown) {
         const html = await marked.parse(pdfResult.markdown, { async: true });
         result = { markdown: pdfResult.markdown, html };
