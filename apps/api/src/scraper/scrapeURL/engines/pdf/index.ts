@@ -132,21 +132,25 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
     let effectivePageCount: number = 0;
     let metadataTitle: string | undefined;
 
+    const rustEnabled = !!config.PDF_RUST_EXTRACT_ENABLE;
     const logger = meta.logger.child({ method: "scrapePDF/processPdf" });
 
-    if (mode === "ocr") {
-      // OCR mode: only detect metadata (page count, title) — skip text
-      // extraction, markdown generation, and layout analysis entirely.
+    if (!rustEnabled || mode === "ocr") {
+      // Legacy / OCR path: detect metadata only, skip Rust extraction.
+      // When PDF_RUST_EXTRACT_ENABLE is off this is the only path taken,
+      // matching current prod behaviour (detectPdf → MinerU → pdfParse).
       try {
         const startedAt = Date.now();
         const detection = detectPdf(tempFilePath);
         const durationMs = Date.now() - startedAt;
 
-        logger.info("detectPdf completed (ocr mode)", {
+        logger.info("detectPdf completed", {
           durationMs,
           pdfType: detection.pdfType,
           pageCount: detection.pageCount,
           url: meta.rewrittenUrl ?? meta.url,
+          rustEnabled,
+          mode,
         });
 
         effectivePageCount = maxPages
@@ -161,7 +165,7 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
         Sentry.captureException(error);
       }
     } else {
-      // fast / auto: run full processPdf to get metadata + attempt Rust extraction.
+      // Rust extraction enabled (fast / auto modes).
       try {
         const startedAt = Date.now();
         const pdfResult = processPdf(tempFilePath);
@@ -197,23 +201,9 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
           mode,
         });
 
-        const useRust =
-          mode === "fast"
-            ? eligible && pdfResult.markdown // fast: use Rust if eligible (ignore config flag)
-            : eligible && config.PDF_RUST_EXTRACT_ENABLE && pdfResult.markdown; // auto: also requires config flag
-
-        if (useRust && pdfResult.markdown) {
+        if (eligible && pdfResult.markdown) {
           const html = await marked.parse(pdfResult.markdown, { async: true });
           result = { markdown: pdfResult.markdown, html };
-        } else if (
-          mode === "auto" &&
-          eligible &&
-          !config.PDF_RUST_EXTRACT_ENABLE
-        ) {
-          logger.info(
-            "Rust PDF eligible but not enabled (set PDF_RUST_EXTRACT_ENABLE=true to use)",
-            { url: meta.rewrittenUrl ?? meta.url },
-          );
         }
       } catch (error) {
         logger.warn("processPdf failed, falling back to MU/PdfParse", {
@@ -239,8 +229,10 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
       );
     }
 
-    // 3. OCR / MU fallback (skipped in "fast" mode)
-    if (!result && mode !== "fast") {
+    // OCR / MU fallback.
+    // Skipped only when Rust extraction is enabled AND mode is "fast".
+    const skipOCR = rustEnabled && mode === "fast";
+    if (!result && !skipOCR) {
       const base64Content = (await readFile(tempFilePath)).toString("base64");
 
       if (
@@ -295,7 +287,7 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
       }
     }
 
-    // 4. Final fallback to PdfParse (used by all modes when previous steps didn't produce a result)
+    // Final fallback to PdfParse.
     if (!result) {
       result = await scrapePDFWithParsePDF(
         {
