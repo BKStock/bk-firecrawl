@@ -1,6 +1,9 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use pdf_inspector::{PdfType, process_pdf as rust_process_pdf};
+use pdf_inspector::{
+  PdfOptions, PdfType,
+  process_pdf_with_options as rust_process_pdf,
+};
 
 #[napi(object)]
 pub struct PdfProcessResult {
@@ -23,17 +26,8 @@ fn pdf_type_str(t: PdfType) -> &'static str {
   }
 }
 
-/// Process a PDF file: detect type, extract text + markdown if text-based.
-#[napi]
-pub fn process_pdf(path: String) -> Result<PdfProcessResult> {
-  let result = rust_process_pdf(&path).map_err(|e| {
-    Error::new(
-      Status::GenericFailure,
-      format!("Failed to process PDF: {e}"),
-    )
-  })?;
-
-  Ok(PdfProcessResult {
+fn to_napi_result(result: pdf_inspector::PdfProcessResult) -> PdfProcessResult {
+  PdfProcessResult {
     pdf_type: pdf_type_str(result.pdf_type).to_string(),
     markdown: result.markdown,
     page_count: result.page_count as i32,
@@ -42,5 +36,32 @@ pub fn process_pdf(path: String) -> Result<PdfProcessResult> {
     title: result.title,
     confidence: result.confidence as f64,
     is_complex: result.layout.is_complex,
-  })
+  }
+}
+
+/// Process a PDF file: detect type, extract text + markdown if text-based.
+#[napi]
+pub fn process_pdf(path: String) -> Result<PdfProcessResult> {
+  let result = rust_process_pdf(&path, PdfOptions::new()).map_err(|e| {
+    Error::new(
+      Status::GenericFailure,
+      format!("Failed to process PDF: {e}"),
+    )
+  })?;
+
+  Ok(to_napi_result(result))
+}
+
+/// Fast metadata-only detection: page count, title, type, confidence.
+/// Skips text extraction, markdown generation, and layout analysis.
+#[napi]
+pub fn detect_pdf(path: String) -> Result<PdfProcessResult> {
+  let result = rust_process_pdf(&path, PdfOptions::detect_only()).map_err(|e| {
+    Error::new(
+      Status::GenericFailure,
+      format!("Failed to detect PDF: {e}"),
+    )
+  })?;
+
+  Ok(to_napi_result(result))
 }

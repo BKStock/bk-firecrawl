@@ -17,8 +17,10 @@ import { AbortManagerThrownError } from "../../lib/abortManager";
 import {
   shouldParsePDF,
   getPDFMaxPages,
+  getPDFMode,
 } from "../../../../controllers/v2/types";
-import { processPdf } from "@mendable/firecrawl-rs";
+import type { PDFMode } from "../../../../controllers/v2/types";
+import { processPdf, detectPdf } from "@mendable/firecrawl-rs";
 import { MAX_FILE_SIZE, MILLISECONDS_PER_PAGE } from "./types";
 import type { PDFProcessorResult } from "./types";
 import { scrapePDFWithRunPodMU } from "./runpodMU";
@@ -39,6 +41,7 @@ function getIneligibleReason(
 export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
   const shouldParse = shouldParsePDF(meta.options.parsers);
   const maxPages = getPDFMaxPages(meta.options.parsers);
+  const mode: PDFMode = getPDFMode(meta.options.parsers);
 
   if (!shouldParse) {
     if (meta.pdfPrefetch !== undefined && meta.pdfPrefetch !== null) {
@@ -129,62 +132,97 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
     let effectivePageCount: number = 0;
     let metadataTitle: string | undefined;
 
-    // 1. Always call processPdf to get type, complexity, metadata, and markdown
     const logger = meta.logger.child({ method: "scrapePDF/processPdf" });
-    try {
-      const startedAt = Date.now();
-      const pdfResult = processPdf(tempFilePath);
-      const durationMs = Date.now() - startedAt;
 
-      logger.info("processPdf completed", {
-        durationMs,
-        pdfType: pdfResult.pdfType,
-        pageCount: pdfResult.pageCount,
-        confidence: pdfResult.confidence,
-        isComplex: pdfResult.isComplex,
-        markdownLength: pdfResult.markdown?.length ?? 0,
-        url: meta.rewrittenUrl ?? meta.url,
-      });
+    if (mode === "ocr") {
+      // OCR mode: only detect metadata (page count, title) — skip text
+      // extraction, markdown generation, and layout analysis entirely.
+      try {
+        const startedAt = Date.now();
+        const detection = detectPdf(tempFilePath);
+        const durationMs = Date.now() - startedAt;
 
-      effectivePageCount = maxPages
-        ? Math.min(pdfResult.pageCount, maxPages)
-        : pdfResult.pageCount;
-      metadataTitle = pdfResult.title ?? undefined;
+        logger.info("detectPdf completed (ocr mode)", {
+          durationMs,
+          pdfType: detection.pdfType,
+          pageCount: detection.pageCount,
+          url: meta.rewrittenUrl ?? meta.url,
+        });
 
-      // 2. Check eligibility for Rust-extracted markdown
-      const ineligibleReason = getIneligibleReason(pdfResult);
-      const eligible = !ineligibleReason;
-
-      logger.info("Rust PDF eligibility", {
-        rust_pdf_eligible: eligible,
-        reason: ineligibleReason ?? "eligible",
-        url: meta.rewrittenUrl ?? meta.url,
-        pdfType: pdfResult.pdfType,
-        isComplex: pdfResult.isComplex,
-        pageCount: pdfResult.pageCount,
-        confidence: pdfResult.confidence,
-      });
-
-      console.log("pdfResult", ineligibleReason);
-
-      console.log("pdfResult.markdown", pdfResult.markdown);
-
-      if (eligible && config.PDF_RUST_EXTRACT_ENABLE && pdfResult.markdown) {
-        const html = await marked.parse(pdfResult.markdown, { async: true });
-        result = { markdown: pdfResult.markdown, html };
-      } else if (eligible && !config.PDF_RUST_EXTRACT_ENABLE) {
-        logger.info(
-          "Rust PDF eligible but not enabled (set PDF_RUST_EXTRACT_ENABLE=true to use)",
-          { url: meta.rewrittenUrl ?? meta.url },
-        );
+        effectivePageCount = maxPages
+          ? Math.min(detection.pageCount, maxPages)
+          : detection.pageCount;
+        metadataTitle = detection.title ?? undefined;
+      } catch (error) {
+        logger.warn("detectPdf failed", {
+          error,
+          url: meta.rewrittenUrl ?? meta.url,
+        });
+        Sentry.captureException(error);
       }
-    } catch (error) {
-      logger.warn("processPdf failed, falling back to MU/PdfParse", {
-        error,
-        url: meta.rewrittenUrl ?? meta.url,
-      });
-      Sentry.captureException(error);
-      // effectivePageCount stays 0 — skip time budget check
+    } else {
+      // fast / auto: run full processPdf to get metadata + attempt Rust extraction.
+      try {
+        const startedAt = Date.now();
+        const pdfResult = processPdf(tempFilePath);
+        const durationMs = Date.now() - startedAt;
+
+        logger.info("processPdf completed", {
+          durationMs,
+          pdfType: pdfResult.pdfType,
+          pageCount: pdfResult.pageCount,
+          confidence: pdfResult.confidence,
+          isComplex: pdfResult.isComplex,
+          markdownLength: pdfResult.markdown?.length ?? 0,
+          url: meta.rewrittenUrl ?? meta.url,
+          mode,
+        });
+
+        effectivePageCount = maxPages
+          ? Math.min(pdfResult.pageCount, maxPages)
+          : pdfResult.pageCount;
+        metadataTitle = pdfResult.title ?? undefined;
+
+        const ineligibleReason = getIneligibleReason(pdfResult);
+        const eligible = !ineligibleReason;
+
+        logger.info("Rust PDF eligibility", {
+          rust_pdf_eligible: eligible,
+          reason: ineligibleReason ?? "eligible",
+          url: meta.rewrittenUrl ?? meta.url,
+          pdfType: pdfResult.pdfType,
+          isComplex: pdfResult.isComplex,
+          pageCount: pdfResult.pageCount,
+          confidence: pdfResult.confidence,
+          mode,
+        });
+
+        const useRust =
+          mode === "fast"
+            ? eligible && pdfResult.markdown // fast: use Rust if eligible (ignore config flag)
+            : eligible && config.PDF_RUST_EXTRACT_ENABLE && pdfResult.markdown; // auto: also requires config flag
+
+        if (useRust && pdfResult.markdown) {
+          const html = await marked.parse(pdfResult.markdown, { async: true });
+          result = { markdown: pdfResult.markdown, html };
+        } else if (
+          mode === "auto" &&
+          eligible &&
+          !config.PDF_RUST_EXTRACT_ENABLE
+        ) {
+          logger.info(
+            "Rust PDF eligible but not enabled (set PDF_RUST_EXTRACT_ENABLE=true to use)",
+            { url: meta.rewrittenUrl ?? meta.url },
+          );
+        }
+      } catch (error) {
+        logger.warn("processPdf failed, falling back to MU/PdfParse", {
+          error,
+          url: meta.rewrittenUrl ?? meta.url,
+        });
+        Sentry.captureException(error);
+        // effectivePageCount stays 0 — skip time budget check
+      }
     }
 
     // Only enforce the per-page time budget when we need MU/fallback.
@@ -201,8 +239,8 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
       );
     }
 
-    // 3. Only read base64 + call MU if Rust didn't produce a final result
-    if (!result) {
+    // 3. OCR / MU fallback (skipped in "fast" mode)
+    if (!result && mode !== "fast") {
       const base64Content = (await readFile(tempFilePath)).toString("base64");
 
       if (
@@ -255,19 +293,19 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
             });
         }
       }
+    }
 
-      // If RunPod MU failed or wasn't attempted, use PdfParse
-      if (!result) {
-        result = await scrapePDFWithParsePDF(
-          {
-            ...meta,
-            logger: meta.logger.child({
-              method: "scrapePDF/scrapePDFWithParsePDF",
-            }),
-          },
-          tempFilePath,
-        );
-      }
+    // 4. Final fallback to PdfParse (used by all modes when previous steps didn't produce a result)
+    if (!result) {
+      result = await scrapePDFWithParsePDF(
+        {
+          ...meta,
+          logger: meta.logger.child({
+            method: "scrapePDF/scrapePDFWithParsePDF",
+          }),
+        },
+        tempFilePath,
+      );
     }
 
     return {
