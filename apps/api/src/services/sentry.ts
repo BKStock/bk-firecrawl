@@ -9,6 +9,26 @@ import {
 import { AbortManagerThrownError } from "../scraper/scrapeURL/lib/abortManager";
 import { JobCancelledError } from "../lib/error";
 
+/**
+ * Error messages/patterns that are operational noise and should not be sent to Sentry.
+ * These are network failures, bad user input, downstream issues, etc.
+ */
+const IGNORED_ERROR_MESSAGES = [
+  // Network / fetch failures to downstream services
+  "fetch failed",
+  "incorrect header check",
+  "Request sent failure status",
+  // Bad API usage / input validation
+  "Actions are not supported by any available engines",
+  // x402 config noise on pod startup
+  "x402 Route Configuration Errors",
+  // Redlock / Redis quorum failures (operational noise)
+  "The operation was unable to achieve a quorum during its retry window",
+  // RabbitMQ connection lifecycle during shutdown
+  "Connection closing",
+  "Channel closed",
+];
+
 type CaptureContext = {
   tags?: Record<string, string>;
   extra?: Record<string, any>;
@@ -57,6 +77,12 @@ if (config.SENTRY_DSN) {
         return null;
       }
 
+      // Ignore robustInsert FK violations — logging pipeline race condition,
+      // not actionable per-event (request row not yet written when search references it)
+      if (event.tags?.operation === "robustInsert") {
+        return null;
+      }
+
       const error = hint?.originalException;
 
       if (error && typeof error === "object") {
@@ -82,6 +108,23 @@ if (config.SENTRY_DSN) {
           errorMessage === "Parent crawl/batch scrape was cancelled" ||
           errorMessage.includes("Parent crawl/batch scrape was cancelled")
         ) {
+          return null;
+        }
+
+        // Ignore operational noise: network errors, bad input, infra churn
+        if (
+          IGNORED_ERROR_MESSAGES.some(pattern => errorMessage.includes(pattern))
+        ) {
+          return null;
+        }
+
+        // Ignore ZodErrors (bad API input / validation failures)
+        if ("name" in error && error.name === "ZodError") {
+          return null;
+        }
+
+        // Ignore Postgres invalid input syntax errors (bad user-supplied IDs)
+        if (errorMessage.includes("invalid input syntax for type uuid")) {
           return null;
         }
 
