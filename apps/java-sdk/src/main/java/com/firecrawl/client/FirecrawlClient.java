@@ -387,6 +387,100 @@ public class FirecrawlClient {
     }
 
     // ================================================================
+    // BROWSER
+    // ================================================================
+
+    /**
+     * Creates a new browser session with default settings.
+     *
+     * @return the browser session details including id, CDP URL, and live view URL
+     */
+    public BrowserCreateResponse browser() {
+        return browser(null, null, null);
+    }
+
+    /**
+     * Creates a new browser session with options.
+     *
+     * @param ttl            total session lifetime in seconds (30-3600), or null for default
+     * @param activityTtl    idle timeout in seconds (10-3600), or null for default
+     * @param streamWebView  whether to enable live view streaming, or null for default
+     * @return the browser session details
+     */
+    public BrowserCreateResponse browser(Integer ttl, Integer activityTtl, Boolean streamWebView) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (ttl != null) body.put("ttl", ttl);
+        if (activityTtl != null) body.put("activityTtl", activityTtl);
+        if (streamWebView != null) body.put("streamWebView", streamWebView);
+        return http.post("/v2/browser", body, BrowserCreateResponse.class);
+    }
+
+    /**
+     * Executes code in a browser session using the default language (bash).
+     *
+     * @param sessionId the browser session ID
+     * @param code      the code to execute
+     * @return the execution result including stdout, stderr, and exit code
+     */
+    public BrowserExecuteResponse browserExecute(String sessionId, String code) {
+        return browserExecute(sessionId, code, "bash", null);
+    }
+
+    /**
+     * Executes code in a browser session with options.
+     *
+     * @param sessionId the browser session ID
+     * @param code      the code to execute
+     * @param language  the language: "python", "node", or "bash" (default: "bash")
+     * @param timeout   execution timeout in seconds (1-300), or null for default (30)
+     * @return the execution result including stdout, stderr, and exit code
+     */
+    public BrowserExecuteResponse browserExecute(String sessionId, String code,
+                                                   String language, Integer timeout) {
+        Objects.requireNonNull(sessionId, "Session ID is required");
+        Objects.requireNonNull(code, "Code is required");
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("code", code);
+        body.put("language", language != null ? language : "bash");
+        if (timeout != null) body.put("timeout", timeout);
+        return http.post("/v2/browser/" + sessionId + "/execute", body, BrowserExecuteResponse.class);
+    }
+
+    /**
+     * Deletes a browser session.
+     *
+     * @param sessionId the browser session ID
+     * @return the deletion response with session duration and billing info
+     */
+    public BrowserDeleteResponse deleteBrowser(String sessionId) {
+        Objects.requireNonNull(sessionId, "Session ID is required");
+        return http.delete("/v2/browser/" + sessionId, BrowserDeleteResponse.class);
+    }
+
+    /**
+     * Lists all browser sessions.
+     *
+     * @return the list of browser sessions
+     */
+    public BrowserListResponse listBrowsers() {
+        return listBrowsers(null);
+    }
+
+    /**
+     * Lists browser sessions with optional status filter.
+     *
+     * @param status optional filter: "active" or "destroyed", or null for all
+     * @return the list of browser sessions
+     */
+    public BrowserListResponse listBrowsers(String status) {
+        String endpoint = "/v2/browser";
+        if (status != null && !status.isEmpty()) {
+            endpoint += "?status=" + status;
+        }
+        return http.get(endpoint, BrowserListResponse.class);
+    }
+
+    // ================================================================
     // USAGE & METRICS
     // ================================================================
 
@@ -485,6 +579,53 @@ public class FirecrawlClient {
      */
     public CompletableFuture<AgentStatusResponse> agentAsync(AgentOptions options) {
         return CompletableFuture.supplyAsync(() -> agent(options), asyncExecutor);
+    }
+
+    /**
+     * Asynchronously creates a new browser session.
+     *
+     * @param ttl            total session lifetime in seconds, or null for default
+     * @param activityTtl    idle timeout in seconds, or null for default
+     * @param streamWebView  whether to enable live view streaming, or null for default
+     * @return a CompletableFuture that resolves to the BrowserCreateResponse
+     */
+    public CompletableFuture<BrowserCreateResponse> browserAsync(Integer ttl, Integer activityTtl,
+                                                                    Boolean streamWebView) {
+        return CompletableFuture.supplyAsync(() -> browser(ttl, activityTtl, streamWebView), asyncExecutor);
+    }
+
+    /**
+     * Asynchronously executes code in a browser session.
+     *
+     * @param sessionId the browser session ID
+     * @param code      the code to execute
+     * @param language  the language: "python", "node", or "bash"
+     * @param timeout   execution timeout in seconds, or null for default
+     * @return a CompletableFuture that resolves to the BrowserExecuteResponse
+     */
+    public CompletableFuture<BrowserExecuteResponse> browserExecuteAsync(String sessionId, String code,
+                                                                           String language, Integer timeout) {
+        return CompletableFuture.supplyAsync(() -> browserExecute(sessionId, code, language, timeout), asyncExecutor);
+    }
+
+    /**
+     * Asynchronously deletes a browser session.
+     *
+     * @param sessionId the browser session ID
+     * @return a CompletableFuture that resolves to the BrowserDeleteResponse
+     */
+    public CompletableFuture<BrowserDeleteResponse> deleteBrowserAsync(String sessionId) {
+        return CompletableFuture.supplyAsync(() -> deleteBrowser(sessionId), asyncExecutor);
+    }
+
+    /**
+     * Asynchronously lists browser sessions.
+     *
+     * @param status optional filter: "active" or "destroyed", or null for all
+     * @return a CompletableFuture that resolves to the BrowserListResponse
+     */
+    public CompletableFuture<BrowserListResponse> listBrowsersAsync(String status) {
+        return CompletableFuture.supplyAsync(() -> listBrowsers(status), asyncExecutor);
     }
 
     // ================================================================

@@ -94,6 +94,26 @@ class FirecrawlClientTest {
         assertEquals(List.of("markdown"), modified.getFormats());
     }
 
+    @Test
+    void testBrowserExecuteRequiresSessionId() {
+        FirecrawlClient client = FirecrawlClient.builder()
+                .apiKey("fc-test-key")
+                .build();
+        assertThrows(NullPointerException.class, () ->
+                client.browserExecute(null, "echo test")
+        );
+    }
+
+    @Test
+    void testBrowserDeleteRequiresSessionId() {
+        FirecrawlClient client = FirecrawlClient.builder()
+                .apiKey("fc-test-key")
+                .build();
+        assertThrows(NullPointerException.class, () ->
+                client.deleteBrowser(null)
+        );
+    }
+
     // ================================================================
     // E2E TESTS (require FIRECRAWL_API_KEY)
     // ================================================================
