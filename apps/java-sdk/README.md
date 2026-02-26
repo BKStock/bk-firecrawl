@@ -2,10 +2,80 @@
 
 Java SDK for the [Firecrawl](https://firecrawl.dev) v2 web scraping API.
 
-## Requirements
+## Prerequisites
 
-- Java 11+
-- Gradle 8+ (for building from source)
+Before using the Java SDK, ensure you have the following installed:
+
+### Java Development Kit (JDK)
+
+- **Required:** Java 11 or later
+- **Installation (macOS):**
+  ```bash
+  brew install openjdk
+  ```
+  
+  Then add Java to your PATH:
+  ```bash
+  echo 'export PATH="/opt/homebrew/opt/openjdk/bin:$PATH"' >> ~/.zshrc
+  source ~/.zshrc
+  ```
+
+- **Installation (Linux):**
+  ```bash
+  # Ubuntu/Debian
+  sudo apt-get update
+  sudo apt-get install openjdk-11-jdk
+  
+  # Fedora/RHEL
+  sudo dnf install java-11-openjdk-devel
+  ```
+
+- **Verify Installation:**
+  ```bash
+  java --version
+  ```
+
+### Gradle (for building from source)
+
+- **Required:** Gradle 8+ 
+- **Installation (macOS):**
+  ```bash
+  brew install gradle
+  ```
+
+- **Installation (Linux):**
+  ```bash
+  # Ubuntu/Debian
+  sudo apt-get install gradle
+  
+  # Or use SDKMAN
+  curl -s "https://get.sdkman.io" | bash
+  sdk install gradle
+  ```
+
+- **Verify Installation:**
+  ```bash
+  gradle --version
+  ```
+
+### API Key Setup
+
+1. Get your API key from [Firecrawl Dashboard](https://firecrawl.dev)
+2. Set it as an environment variable:
+   ```bash
+   export FIRECRAWL_API_KEY="fc-your-api-key-here"
+   ```
+
+3. **Or** add it to your shell profile for persistence:
+   ```bash
+   # For Zsh (macOS/Linux)
+   echo 'export FIRECRAWL_API_KEY="fc-your-api-key-here"' >> ~/.zshrc
+   source ~/.zshrc
+   
+   # For Bash
+   echo 'export FIRECRAWL_API_KEY="fc-your-api-key-here"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
 
 ## Installation
 
@@ -286,21 +356,100 @@ FirecrawlClient client = FirecrawlClient.builder()
 
 ## Building from Source
 
+### Clone and Build
+
 ```bash
-cd apps/java-sdk
-./gradlew build
+# Clone the repository (if you haven't already)
+git clone https://github.com/mendableai/firecrawl.git
+cd firecrawl/apps/java-sdk
+
+# Build the project
+gradle build
+```
+
+### Generate JAR
+
+```bash
+gradle jar
+# Output: build/libs/firecrawl-java-1.0.0.jar
+```
+
+### Install Locally
+
+```bash
+gradle publishToMavenLocal
+# Now available as: com.firecrawl:firecrawl-java:1.0.0 in local Maven repository
 ```
 
 ## Running Tests
 
-Unit tests run without any configuration:
+The SDK includes both unit tests and E2E integration tests.
+
+### Unit Tests (No API Key Required)
+
+Unit tests verify SDK functionality without making actual API calls:
 
 ```bash
-./gradlew test
+gradle test
 ```
 
-E2E tests require a valid API key:
+### E2E Integration Tests (API Key Required)
+
+E2E tests make real API calls and require a valid API key. These tests will be **skipped** if `FIRECRAWL_API_KEY` is not set:
 
 ```bash
-FIRECRAWL_API_KEY=fc-xxx ./gradlew test
+# Set your API key
+export FIRECRAWL_API_KEY="fc-your-api-key-here"
+
+# Run all tests including E2E
+gradle test
 ```
+
+### Run Specific Tests
+
+```bash
+# Run only scrape tests
+gradle test --tests "*testScrape*"
+
+# Run only E2E tests
+gradle test --tests "*E2E"
+
+# Run specific test class
+gradle test --tests "com.firecrawl.FirecrawlClientTest"
+```
+
+### View Test Results
+
+After running tests, view the detailed report:
+
+```bash
+open build/reports/tests/test/index.html  # macOS
+xdg-open build/reports/tests/test/index.html  # Linux
+```
+
+## Development Setup
+
+If you're contributing to the SDK or testing local changes:
+
+1. **Install Prerequisites** (see Prerequisites section above)
+
+2. **Set Environment Variables:**
+   ```bash
+   export FIRECRAWL_API_KEY="fc-your-api-key"
+   # Optional: use local API server
+   export FIRECRAWL_API_URL="http://localhost:3002"
+   ```
+
+3. **Build and Test:**
+   ```bash
+   gradle clean build test
+   ```
+
+4. **Make Changes and Retest:**
+   ```bash
+   # Quick compilation check
+   gradle compileJava
+   
+   # Run tests
+   gradle test --tests "*testYourFeature*"
+   ```

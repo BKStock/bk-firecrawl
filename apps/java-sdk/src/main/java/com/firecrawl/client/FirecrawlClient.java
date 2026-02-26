@@ -98,7 +98,7 @@ public class FirecrawlClient {
         if (options != null) {
             mergeOptions(body, options);
         }
-        return extractData(http.post("/v1/scrape", body, Map.class), Document.class);
+        return extractData(http.post("/v2/scrape", body, Map.class), Document.class);
     }
 
     // ================================================================
@@ -119,7 +119,7 @@ public class FirecrawlClient {
         if (options != null) {
             mergeOptions(body, options);
         }
-        return http.post("/v1/crawl", body, CrawlResponse.class);
+        return http.post("/v2/crawl", body, CrawlResponse.class);
     }
 
     /**
@@ -130,7 +130,7 @@ public class FirecrawlClient {
      */
     public CrawlJob getCrawlStatus(String jobId) {
         Objects.requireNonNull(jobId, "Job ID is required");
-        return http.get("/v1/crawl/" + jobId, CrawlJob.class);
+        return http.get("/v2/crawl/" + jobId, CrawlJob.class);
     }
 
     /**
@@ -167,7 +167,7 @@ public class FirecrawlClient {
     @SuppressWarnings("unchecked")
     public Map<String, Object> cancelCrawl(String jobId) {
         Objects.requireNonNull(jobId, "Job ID is required");
-        return http.delete("/v1/crawl/" + jobId, Map.class);
+        return http.delete("/v2/crawl/" + jobId, Map.class);
     }
 
     /**
@@ -179,7 +179,7 @@ public class FirecrawlClient {
     @SuppressWarnings("unchecked")
     public Map<String, Object> getCrawlErrors(String jobId) {
         Objects.requireNonNull(jobId, "Job ID is required");
-        return http.get("/v1/crawl/" + jobId + "/errors", Map.class);
+        return http.get("/v2/crawl/" + jobId + "/errors", Map.class);
     }
 
     // ================================================================
@@ -200,7 +200,7 @@ public class FirecrawlClient {
         if (options != null) {
             mergeOptions(body, options);
         }
-        return http.post("/v1/batch/scrape", body, BatchScrapeResponse.class);
+        return http.post("/v2/batch/scrape", body, BatchScrapeResponse.class);
     }
 
     /**
@@ -211,7 +211,7 @@ public class FirecrawlClient {
      */
     public BatchScrapeJob getBatchScrapeStatus(String jobId) {
         Objects.requireNonNull(jobId, "Job ID is required");
-        return http.get("/v1/batch/scrape/" + jobId, BatchScrapeJob.class);
+        return http.get("/v2/batch/scrape/" + jobId, BatchScrapeJob.class);
     }
 
     /**
@@ -249,7 +249,7 @@ public class FirecrawlClient {
     @SuppressWarnings("unchecked")
     public Map<String, Object> cancelBatchScrape(String jobId) {
         Objects.requireNonNull(jobId, "Job ID is required");
-        return http.delete("/v1/batch/scrape/" + jobId, Map.class);
+        return http.delete("/v2/batch/scrape/" + jobId, Map.class);
     }
 
     // ================================================================
@@ -280,7 +280,7 @@ public class FirecrawlClient {
         if (options != null) {
             mergeOptions(body, options);
         }
-        return extractData(http.post("/v1/map", body, Map.class), MapData.class);
+        return extractData(http.post("/v2/map", body, Map.class), MapData.class);
     }
 
     // ================================================================
@@ -311,7 +311,7 @@ public class FirecrawlClient {
         if (options != null) {
             mergeOptions(body, options);
         }
-        return extractData(http.post("/v1/search", body, Map.class), SearchData.class);
+        return extractData(http.post("/v2/search", body, Map.class), SearchData.class);
     }
 
     // ================================================================
@@ -326,7 +326,7 @@ public class FirecrawlClient {
      */
     public ExtractResponse startExtract(ExtractOptions options) {
         Objects.requireNonNull(options, "Extract options are required");
-        return http.post("/v1/extract", options, ExtractResponse.class);
+        return http.post("/v2/extract", options, ExtractResponse.class);
     }
 
     /**
@@ -337,7 +337,7 @@ public class FirecrawlClient {
      */
     public ExtractResponse getExtractStatus(String jobId) {
         Objects.requireNonNull(jobId, "Job ID is required");
-        return http.get("/v1/extract/" + jobId, ExtractResponse.class);
+        return http.get("/v2/extract/" + jobId, ExtractResponse.class);
     }
 
     /**
@@ -386,7 +386,7 @@ public class FirecrawlClient {
      */
     public AgentResponse startAgent(AgentOptions options) {
         Objects.requireNonNull(options, "Agent options are required");
-        return http.post("/v1/agent", options, AgentResponse.class);
+        return http.post("/v2/agent", options, AgentResponse.class);
     }
 
     /**
@@ -397,7 +397,7 @@ public class FirecrawlClient {
      */
     public AgentStatusResponse getAgentStatus(String jobId) {
         Objects.requireNonNull(jobId, "Job ID is required");
-        return http.get("/v1/agent/" + jobId, AgentStatusResponse.class);
+        return http.get("/v2/agent/" + jobId, AgentStatusResponse.class);
     }
 
     /**
@@ -443,7 +443,7 @@ public class FirecrawlClient {
     @SuppressWarnings("unchecked")
     public Map<String, Object> cancelAgent(String jobId) {
         Objects.requireNonNull(jobId, "Job ID is required");
-        return http.delete("/v1/agent/" + jobId, Map.class);
+        return http.delete("/v2/agent/" + jobId, Map.class);
     }
 
     // ================================================================
@@ -454,14 +454,14 @@ public class FirecrawlClient {
      * Gets current concurrency usage.
      */
     public ConcurrencyCheck getConcurrency() {
-        return http.get("/v1/concurrency", ConcurrencyCheck.class);
+        return http.get("/v2/concurrency-check", ConcurrencyCheck.class);
     }
 
     /**
      * Gets current credit usage.
      */
     public CreditUsage getCreditUsage() {
-        return http.get("/v1/credits", CreditUsage.class);
+        return http.get("/v2/team/credit-usage", CreditUsage.class);
     }
 
     // ================================================================

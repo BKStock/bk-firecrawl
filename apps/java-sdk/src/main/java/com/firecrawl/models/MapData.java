@@ -6,6 +6,7 @@ import java.util.Map;
 
 /**
  * Result of a map operation containing discovered URLs.
+ * In v2, each link is a MapDocument with url, title, and description.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class MapData {

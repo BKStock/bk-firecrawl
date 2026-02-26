@@ -20,6 +20,7 @@ public class MapOptions {
     private MapOptions() {}
 
     public String getSearch() { return search; }
+    /** Sitemap mode: "only", "include", or "skip". */
     public String getSitemap() { return sitemap; }
     public Boolean getIncludeSubdomains() { return includeSubdomains; }
     public Boolean getIgnoreQueryParameters() { return ignoreQueryParameters; }
@@ -44,7 +45,7 @@ public class MapOptions {
 
         /** Filter discovered URLs by keyword. */
         public Builder search(String search) { this.search = search; return this; }
-        /** Sitemap handling: "skip", "include", or "only". */
+        /** Sitemap mode: "only", "include", or "skip". */
         public Builder sitemap(String sitemap) { this.sitemap = sitemap; return this; }
         /** Include subdomains. */
         public Builder includeSubdomains(Boolean includeSubdomains) { this.includeSubdomains = includeSubdomains; return this; }
