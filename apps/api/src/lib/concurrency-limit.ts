@@ -101,6 +101,32 @@ export async function pushConcurrencyLimitedJob(
   await redis.sadd("concurrency-limit-queues", queueKey);
 }
 
+export async function pushConcurrencyLimitedJobsBulk(
+  team_id: string,
+  jobs: ConcurrencyLimitedJob[],
+  timeout: number,
+  now: number = Date.now(),
+) {
+  if (jobs.length === 0) return;
+
+  const queueKey = constructQueueKey(team_id);
+  const redis = getRedisConnection();
+  const pipeline = redis.pipeline();
+
+  for (const job of jobs) {
+    const jobKey = constructJobKey(job.id);
+    if (timeout === Infinity) {
+      pipeline.set(jobKey, JSON.stringify(job), "EX", 172800); // 48h
+    } else {
+      pipeline.set(jobKey, JSON.stringify(job), "PX", timeout);
+    }
+    pipeline.zadd(queueKey, now + timeout, job.id);
+  }
+
+  pipeline.sadd("concurrency-limit-queues", queueKey);
+  await pipeline.exec();
+}
+
 export async function getConcurrencyLimitedJobs(team_id: string) {
   return new Set(
     await getRedisConnection().zrange(constructQueueKey(team_id), 0, -1),
