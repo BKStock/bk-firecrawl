@@ -315,66 +315,6 @@ public class FirecrawlClient {
     }
 
     // ================================================================
-    // EXTRACT
-    // ================================================================
-
-    /**
-     * Starts an async extract job.
-     *
-     * @param options extract configuration options
-     * @return the extract response with job ID
-     */
-    public ExtractResponse startExtract(ExtractOptions options) {
-        Objects.requireNonNull(options, "Extract options are required");
-        return http.post("/v2/extract", options, ExtractResponse.class);
-    }
-
-    /**
-     * Gets the status of an extract job.
-     *
-     * @param jobId the extract job ID
-     * @return the extract response
-     */
-    public ExtractResponse getExtractStatus(String jobId) {
-        Objects.requireNonNull(jobId, "Job ID is required");
-        return http.get("/v2/extract/" + jobId, ExtractResponse.class);
-    }
-
-    /**
-     * Runs an extract job and waits for completion (auto-polling).
-     *
-     * @param options extract configuration options
-     * @return the completed extract response
-     */
-    public ExtractResponse extract(ExtractOptions options) {
-        return extract(options, DEFAULT_POLL_INTERVAL, DEFAULT_JOB_TIMEOUT);
-    }
-
-    /**
-     * Runs an extract job and waits for completion with custom polling settings.
-     *
-     * @param options         extract configuration options
-     * @param pollIntervalSec seconds between status checks
-     * @param timeoutSec      maximum seconds to wait
-     * @return the completed extract response
-     */
-    public ExtractResponse extract(ExtractOptions options, int pollIntervalSec, int timeoutSec) {
-        ExtractResponse start = startExtract(options);
-        if (start.getId() == null) {
-            return start;
-        }
-        long deadline = System.currentTimeMillis() + (timeoutSec * 1000L);
-        while (System.currentTimeMillis() < deadline) {
-            ExtractResponse status = getExtractStatus(start.getId());
-            if (status.isDone()) {
-                return status;
-            }
-            sleep(pollIntervalSec);
-        }
-        throw new JobTimeoutException(start.getId(), timeoutSec, "Extract");
-    }
-
-    // ================================================================
     // AGENT
     // ================================================================
 
@@ -535,16 +475,6 @@ public class FirecrawlClient {
      */
     public CompletableFuture<MapData> mapAsync(String url, MapOptions options) {
         return CompletableFuture.supplyAsync(() -> map(url, options), asyncExecutor);
-    }
-
-    /**
-     * Asynchronously runs an extract job and waits for completion.
-     *
-     * @param options extract configuration options
-     * @return a CompletableFuture that resolves to the ExtractResponse
-     */
-    public CompletableFuture<ExtractResponse> extractAsync(ExtractOptions options) {
-        return CompletableFuture.supplyAsync(() -> extract(options), asyncExecutor);
     }
 
     /**

@@ -259,27 +259,6 @@ if (results.getWeb() != null) {
 }
 ```
 
-### Extract
-
-Extract structured data from web pages using LLM.
-
-```java
-ExtractResponse result = client.extract(
-    ExtractOptions.builder()
-        .urls(List.of("https://example.com"))
-        .prompt("Extract the main heading and first paragraph")
-        .schema(Map.of(
-            "type", "object",
-            "properties", Map.of(
-                "heading", Map.of("type", "string"),
-                "paragraph", Map.of("type", "string")
-            )
-        ))
-        .build());
-
-System.out.println(result.getData());
-```
-
 ### Agent
 
 Run an AI-powered agent to research and extract data from the web.
