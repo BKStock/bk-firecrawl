@@ -41,10 +41,12 @@ const browserCreateRequestSchema = z.object({
   ttl: z.number().min(30).max(3600).default(300),
   activityTtl: z.number().min(10).max(3600).default(120),
   streamWebView: z.boolean().default(true),
-  profile: z.object({
-    name: z.string().min(1).max(128),
-    writeMode: z.enum(["readonly", "readwrite"]).default("readwrite"),
-  }).optional(),
+  profile: z
+    .object({
+      name: z.string().min(1).max(128),
+      saveChanges: z.boolean().default(true),
+    })
+    .optional(),
 });
 
 type BrowserCreateRequest = z.infer<typeof browserCreateRequestSchema>;
@@ -260,7 +262,7 @@ export async function browserCreateController(
       .slice(0, 16);
     persistentStorage = {
       uniqueId: `${teamHash}_${profile.name}`,
-      write: profile.writeMode === "readwrite",
+      write: profile.saveChanges !== false,
     };
   }
 
@@ -285,7 +287,8 @@ export async function browserCreateController(
         });
         return res.status(409).json({
           success: false,
-          error: "Another session is currently writing to this profile. Only one writer is allowed at a time. You can still access it with writeMode \"readonly\", or try again later.",
+          error:
+            "Another session is currently writing to this profile. Only one writer is allowed at a time. You can still access it with saveChanges: false, or try again later.",
         });
       }
 

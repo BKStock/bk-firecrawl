@@ -3,7 +3,7 @@ import { Request, Response } from "express";
 import { getRedisConnection } from "../../../services/queue-service";
 import { scrapeQueue } from "../../../services/worker/nuq";
 import {
-  pushConcurrencyLimitedJobsBulk,
+  pushConcurrencyLimitedJobs,
   pushConcurrencyLimitActiveJob,
   getConcurrencyLimitActiveJobsCount,
 } from "../../../lib/concurrency-limit";
@@ -102,17 +102,20 @@ export async function concurrencyQueueBackfillController(
       }
     }
 
-    // Bulk push all queued jobs in a single Redis pipeline
-    await pushConcurrencyLimitedJobsBulk(
-      ownerId,
-      jobsToQueue.map(job => ({
-        id: job.id,
-        data: job.data,
-        priority: job.priority,
-        listenable: job.listenChannelId !== undefined,
-      })),
-      Infinity,
-    );
+    if (jobsToQueue.length > 0) {
+      await pushConcurrencyLimitedJobs(
+        ownerId,
+        jobsToQueue.map(job => ({
+          job: {
+            id: job.id,
+            data: job.data,
+            priority: job.priority,
+            listenable: job.listenChannelId !== undefined,
+          },
+          timeout: Infinity,
+        })),
+      );
+    }
 
     // Promote jobs that can start immediately
     // These involve DB transactions per job so they remain sequential

@@ -87,42 +87,34 @@ export async function pushConcurrencyLimitedJob(
   timeout: number,
   now: number = Date.now(),
 ) {
-  const queueKey = constructQueueKey(team_id);
-  const jobKey = constructJobKey(job.id);
-  const redis = getRedisConnection();
-
-  if (timeout === Infinity) {
-    await redis.set(jobKey, JSON.stringify(job), "EX", 172800); // 48h
-  } else {
-    await redis.set(jobKey, JSON.stringify(job), "PX", timeout);
-  }
-
-  await redis.zadd(queueKey, now + timeout, job.id);
-  await redis.sadd("concurrency-limit-queues", queueKey);
+  await pushConcurrencyLimitedJobs(team_id, [{ job, timeout }], now);
 }
 
-export async function pushConcurrencyLimitedJobsBulk(
+export async function pushConcurrencyLimitedJobs(
   team_id: string,
-  jobs: ConcurrencyLimitedJob[],
-  timeout: number,
+  jobs: { job: ConcurrencyLimitedJob; timeout: number }[],
   now: number = Date.now(),
 ) {
-  if (jobs.length === 0) return;
+  if (jobs.length === 0) {
+    return;
+  }
 
   const queueKey = constructQueueKey(team_id);
   const redis = getRedisConnection();
   const pipeline = redis.pipeline();
+  const zaddArgs: (string | number)[] = [];
 
-  for (const job of jobs) {
+  for (const { job, timeout } of jobs) {
     const jobKey = constructJobKey(job.id);
     if (timeout === Infinity) {
       pipeline.set(jobKey, JSON.stringify(job), "EX", 172800); // 48h
     } else {
       pipeline.set(jobKey, JSON.stringify(job), "PX", timeout);
     }
-    pipeline.zadd(queueKey, now + timeout, job.id);
+    zaddArgs.push(now + timeout, job.id);
   }
 
+  pipeline.zadd(queueKey, ...zaddArgs);
   pipeline.sadd("concurrency-limit-queues", queueKey);
   await pipeline.exec();
 }
@@ -271,11 +263,11 @@ async function getNextConcurrentJob(teamId: string): Promise<{
   } finally {
     // Re-add crawl-blocked jobs so they can be picked up later
     if (crawlBlocked.length > 0) {
-      const pipeline = redis.pipeline();
+      const zaddArgs: (string | number)[] = [];
       for (const { member, score } of crawlBlocked) {
-        pipeline.zadd(queueKey, score, member);
+        zaddArgs.push(score, member);
       }
-      await pipeline.exec();
+      await redis.zadd(queueKey, ...zaddArgs);
     }
   }
 }
