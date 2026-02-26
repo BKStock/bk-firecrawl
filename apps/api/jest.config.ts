@@ -13,8 +13,10 @@ const config: JestConfigWithTsJest = {
     [
       "jest-junit",
       {
-        outputDirectory: "test-results",
+        outputDirectory: "<rootDir>/test-results",
         outputName: "junit.xml",
+        addFileAttribute: true,
+        suiteNameTemplate: "{filepath}",
       },
     ],
   ],
