@@ -259,8 +259,8 @@ async function sendNotificationInternal(
           }
         }
 
-        console.log(
-          `Sending notification for team_id: ${team_id} and notificationType: ${notificationType}`,
+        logger.info(
+          "Sending notification for team_id: " + team_id + " and notificationType: " + notificationType,
         );
 
         if (is_ledger_enabled) {
