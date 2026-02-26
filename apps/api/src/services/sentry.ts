@@ -20,10 +20,6 @@ const IGNORED_ERROR_MESSAGES = [
   "Request sent failure status",
   // Bad API usage / input validation
   "Actions are not supported by any available engines",
-  // x402 config noise on pod startup
-  "x402 Route Configuration Errors",
-  // Redlock / Redis quorum failures (operational noise)
-  "The operation was unable to achieve a quorum during its retry window",
   // RabbitMQ connection lifecycle during shutdown
   "Connection closing",
   "Channel closed",
@@ -74,12 +70,6 @@ if (config.SENTRY_DSN) {
         event.extra?.zero_data_retention === true;
 
       if (zeroDataRetention) {
-        return null;
-      }
-
-      // Ignore robustInsert FK violations — logging pipeline race condition,
-      // not actionable per-event (request row not yet written when search references it)
-      if (event.tags?.operation === "robustInsert") {
         return null;
       }
 

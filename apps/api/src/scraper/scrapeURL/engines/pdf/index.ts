@@ -4,7 +4,6 @@ import { EngineScrapeResult } from "..";
 import * as marked from "marked";
 import { robustFetch } from "../../lib/fetch";
 import { z } from "zod";
-import * as Sentry from "@sentry/node";
 import escapeHtml from "escape-html";
 import PdfParse from "pdf-parse";
 import { downloadFile, fetchFileToBuffer } from "../utils/downloadFile";
@@ -434,7 +433,14 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
           "RunPod MU failed to parse PDF (could be due to timeout) -- falling back to parse-pdf",
           { error },
         );
-        Sentry.captureException(error);
+        captureExceptionWithZdrCheck(error, {
+          extra: {
+            zeroDataRetention: meta.internalOptions.zeroDataRetention ?? false,
+            scrapeId: meta.id,
+            teamId: meta.internalOptions.teamId,
+            url: meta.rewrittenUrl ?? meta.url,
+          },
+        });
         const muV1DurationMs = Date.now() - muV1StartedAt;
         meta.logger
           .child({ method: "scrapePDF/MUv1Experiment" })
