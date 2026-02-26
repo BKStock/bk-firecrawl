@@ -26,15 +26,13 @@ class FirecrawlLiveSiteTest {
     @BeforeAll
     static void setup() {
         String apiKey = System.getenv("FIRECRAWL_API_KEY");
-        if (apiKey != null && !apiKey.isEmpty()) {
-            client = FirecrawlClient.builder()
-                    .apiKey(apiKey)
-                    .build();
+        if (apiKey != null && !apiKey.isBlank()) {
+            client = FirecrawlClient.fromEnv();
         }
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testScrapeFirecrawlHomepage() {
         System.out.println("\n=== Testing against LIVE Firecrawl.dev website ===\n");
         System.out.println("Scraping: https://firecrawl.dev");
@@ -80,7 +78,7 @@ class FirecrawlLiveSiteTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testScrapeFirecrawlPricing() {
         System.out.println("\n=== Testing Firecrawl Pricing Page ===\n");
         System.out.println("Scraping: https://firecrawl.dev/pricing");
@@ -104,7 +102,7 @@ class FirecrawlLiveSiteTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testScrapeFirecrawlDocs() {
         System.out.println("\n=== Testing Firecrawl Documentation ===\n");
         System.out.println("Scraping: https://docs.firecrawl.dev");

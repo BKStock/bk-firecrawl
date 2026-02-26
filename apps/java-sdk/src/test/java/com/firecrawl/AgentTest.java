@@ -28,15 +28,13 @@ class AgentTest {
     @BeforeAll
     static void setup() {
         String apiKey = System.getenv("FIRECRAWL_API_KEY");
-        if (apiKey != null && !apiKey.isEmpty()) {
-            client = FirecrawlClient.builder()
-                    .apiKey(apiKey)
-                    .build();
+        if (apiKey != null && !apiKey.isBlank()) {
+            client = FirecrawlClient.fromEnv();
         }
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testAgentWithPrompt() {
         System.out.println("\n=== Test: Agent with Prompt ===");
         
@@ -58,7 +56,7 @@ class AgentTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testAgentWithURLs() {
         System.out.println("\n=== Test: Agent with Specific URLs ===");
         
@@ -78,7 +76,7 @@ class AgentTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testAgentWithSchema() {
         System.out.println("\n=== Test: Agent with Schema ===");
         
@@ -116,7 +114,7 @@ class AgentTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testStartAgent() {
         System.out.println("\n=== Test: Start Agent (Async) ===");
         
@@ -135,7 +133,7 @@ class AgentTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testAgentStatusCheck() {
         System.out.println("\n=== Test: Check Agent Status ===");
         
@@ -159,7 +157,7 @@ class AgentTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testCancelAgent() {
         System.out.println("\n=== Test: Cancel Agent ===");
         
@@ -177,7 +175,7 @@ class AgentTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testAgentWithStrictURLConstraints() {
         System.out.println("\n=== Test: Agent with Strict URL Constraints ===");
         
@@ -198,7 +196,7 @@ class AgentTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testAgentWithMaxCredits() {
         System.out.println("\n=== Test: Agent with Max Credits Limit ===");
         
@@ -216,7 +214,7 @@ class AgentTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testAgentResearchTask() {
         System.out.println("\n=== Test: Agent Research - Firecrawl Features ===");
         
@@ -242,7 +240,7 @@ class AgentTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testAgentComprehensive() {
         System.out.println("\n=== Test: Agent with All Options ===");
         

@@ -28,15 +28,13 @@ class ScrapeTest {
     static void setup() {
         // Initialize client from environment variable
         String apiKey = System.getenv("FIRECRAWL_API_KEY");
-        if (apiKey != null && !apiKey.isEmpty()) {
-            client = FirecrawlClient.builder()
-                    .apiKey(apiKey)
-                    .build();
+        if (apiKey != null && !apiKey.isBlank()) {
+            client = FirecrawlClient.fromEnv();
         }
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testScrapeBasic() {
         // Test basic scraping with markdown format
         System.out.println("Testing basic scrape with markdown format...");
@@ -56,7 +54,7 @@ class ScrapeTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testScrapeWithMultipleFormats() {
         // Test scraping with multiple formats
         System.out.println("Testing scrape with multiple formats (markdown + html)...");
@@ -79,7 +77,7 @@ class ScrapeTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testScrapeWithMetadata() {
         // Test that metadata is properly extracted
         System.out.println("Testing scrape with metadata extraction...");
@@ -103,7 +101,7 @@ class ScrapeTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testScrapeWithOnlyMainContent() {
         // Test scraping with onlyMainContent option
         System.out.println("Testing scrape with onlyMainContent option...");
@@ -124,7 +122,7 @@ class ScrapeTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testScrapeWithTimeout() {
         // Test scraping with custom timeout
         System.out.println("Testing scrape with custom timeout...");
@@ -143,7 +141,7 @@ class ScrapeTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testScrapeInvalidUrl() {
         // Test that invalid URLs are handled properly
         System.out.println("Testing scrape with invalid URL...");
@@ -159,7 +157,7 @@ class ScrapeTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testScrapeWithWaitFor() {
         // Test scraping with waitFor option (useful for dynamic content)
         System.out.println("Testing scrape with waitFor option...");

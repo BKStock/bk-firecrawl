@@ -26,15 +26,13 @@ class MapTest {
     @BeforeAll
     static void setup() {
         String apiKey = System.getenv("FIRECRAWL_API_KEY");
-        if (apiKey != null && !apiKey.isEmpty()) {
-            client = FirecrawlClient.builder()
-                    .apiKey(apiKey)
-                    .build();
+        if (apiKey != null && !apiKey.isBlank()) {
+            client = FirecrawlClient.fromEnv();
         }
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testMapMinimal() {
         System.out.println("\n=== Test: Map - Minimal Request ===");
         
@@ -59,7 +57,7 @@ class MapTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testMapWithLimit() {
         System.out.println("\n=== Test: Map with Limit ===");
         
@@ -78,7 +76,7 @@ class MapTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testMapWithSearch() {
         System.out.println("\n=== Test: Map with Search Filter ===");
         
@@ -105,7 +103,7 @@ class MapTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testMapWithSkipSitemap() {
         System.out.println("\n=== Test: Map with Sitemap Skip ===");
         
@@ -132,7 +130,7 @@ class MapTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testMapWithSitemapOnly() {
         System.out.println("\n=== Test: Map with Sitemap Only ===");
         
@@ -159,7 +157,7 @@ class MapTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testMapWithIncludeSubdomains() {
         System.out.println("\n=== Test: Map with Include Subdomains ===");
         
@@ -189,7 +187,7 @@ class MapTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testMapFirecrawlDocs() {
         System.out.println("\n=== Test: Map Firecrawl Documentation ===");
         
@@ -212,7 +210,7 @@ class MapTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testMapLinkStructure() {
         System.out.println("\n=== Test: Verify Map Link Structure ===");
         
@@ -236,7 +234,7 @@ class MapTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testMapWithTimeout() {
         System.out.println("\n=== Test: Map with Timeout ===");
         
@@ -254,7 +252,7 @@ class MapTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testMapComprehensive() {
         System.out.println("\n=== Test: Map with All Options ===");
         

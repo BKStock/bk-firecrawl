@@ -27,15 +27,13 @@ class CrawlTest {
     @BeforeAll
     static void setup() {
         String apiKey = System.getenv("FIRECRAWL_API_KEY");
-        if (apiKey != null && !apiKey.isEmpty()) {
-            client = FirecrawlClient.builder()
-                    .apiKey(apiKey)
-                    .build();
+        if (apiKey != null && !apiKey.isBlank()) {
+            client = FirecrawlClient.fromEnv();
         }
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testStartCrawlMinimal() {
         System.out.println("\n=== Test: Start Crawl - Minimal Request ===");
         
@@ -54,7 +52,7 @@ class CrawlTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testStartCrawlWithOptions() {
         System.out.println("\n=== Test: Start Crawl - With Options ===");
         
@@ -74,7 +72,7 @@ class CrawlTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testGetCrawlStatus() {
         System.out.println("\n=== Test: Get Crawl Status ===");
         
@@ -97,16 +95,19 @@ class CrawlTest {
         assertTrue(List.of("scraping", "completed", "failed", "cancelled").contains(status.getStatus()),
                 "Status should be valid: " + status.getStatus());
         assertTrue(status.getCompleted() >= 0, "Completed count should be non-negative");
-        assertNotNull(status.getData(), "Data should not be null");
-        
+        // Data may be null while crawl is still in progress (status=scraping)
+        if ("completed".equals(status.getStatus())) {
+            assertNotNull(status.getData(), "Data should not be null when completed");
+        }
+
         System.out.println("✓ Status retrieved successfully");
         System.out.println("  Status: " + status.getStatus());
         System.out.println("  Completed: " + status.getCompleted() + "/" + status.getTotal());
-        System.out.println("  Documents: " + status.getData().size());
+        System.out.println("  Documents: " + (status.getData() != null ? status.getData().size() : 0));
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testCancelCrawl() {
         System.out.println("\n=== Test: Cancel Crawl ===");
         
@@ -124,7 +125,7 @@ class CrawlTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testCrawlWithWait() {
         System.out.println("\n=== Test: Crawl with Wait (Blocking) ===");
         
@@ -156,7 +157,7 @@ class CrawlTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testCrawlWithScrapeOptions() {
         System.out.println("\n=== Test: Crawl with Scrape Options ===");
         
@@ -178,7 +179,7 @@ class CrawlTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testCrawlWithExcludePaths() {
         System.out.println("\n=== Test: Crawl with Exclude Paths ===");
         
@@ -196,7 +197,7 @@ class CrawlTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testCrawlWithIncludePaths() {
         System.out.println("\n=== Test: Crawl with Include Paths ===");
         
@@ -214,7 +215,7 @@ class CrawlTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testCrawlWithAllowExternalLinks() {
         System.out.println("\n=== Test: Crawl with Allow External Links ===");
         
@@ -231,7 +232,7 @@ class CrawlTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testCrawlWithWebhookConfig() {
         System.out.println("\n=== Test: Crawl with Webhook (if available) ===");
         
@@ -255,7 +256,7 @@ class CrawlTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testCrawlFirecrawlHomepage() {
         System.out.println("\n=== Test: Crawl Firecrawl.dev Homepage ===");
         

@@ -26,15 +26,13 @@ class SearchTest {
     @BeforeAll
     static void setup() {
         String apiKey = System.getenv("FIRECRAWL_API_KEY");
-        if (apiKey != null && !apiKey.isEmpty()) {
-            client = FirecrawlClient.builder()
-                    .apiKey(apiKey)
-                    .build();
+        if (apiKey != null && !apiKey.isBlank()) {
+            client = FirecrawlClient.fromEnv();
         }
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchMinimal() {
         System.out.println("\n=== Test: Search - Minimal Request ===");
         
@@ -59,7 +57,7 @@ class SearchTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchWithLimit() {
         System.out.println("\n=== Test: Search with Limit ===");
         
@@ -78,7 +76,7 @@ class SearchTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchWithMultipleSources() {
         System.out.println("\n=== Test: Search with Multiple Sources ===");
         
@@ -101,7 +99,7 @@ class SearchTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchResultStructure() {
         System.out.println("\n=== Test: Verify Search Result Structure ===");
         
@@ -138,7 +136,7 @@ class SearchTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchWithLocation() {
         System.out.println("\n=== Test: Search with Location ===");
         
@@ -156,7 +154,7 @@ class SearchTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchWithTimeFilter() {
         System.out.println("\n=== Test: Search with Time Filter ===");
         
@@ -174,7 +172,7 @@ class SearchTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchWithScrapeOptions() {
         System.out.println("\n=== Test: Search with Scrape Options ===");
         
@@ -188,15 +186,22 @@ class SearchTest {
                         .build());
 
         assertNotNull(results.getWeb(), "Web results should not be null");
-        
-        // If scrape options are used, results might be Document objects
+
+        // When scrapeOptions with markdown format are provided, results should include markdown content
+        if (!results.getWeb().isEmpty()) {
+            Map<String, Object> first = results.getWeb().get(0);
+            Object markdown = first.get("markdown");
+            assertNotNull(markdown, "Scraped result should contain markdown content when formats=[markdown]");
+            assertFalse(markdown.toString().isEmpty(), "Markdown content should not be empty");
+        }
+
         System.out.println("✓ Search with scrape options completed");
         System.out.println("  Results: " + results.getWeb().size());
         System.out.println("  Scrape formats: markdown");
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchFirecrawlSpecific() {
         System.out.println("\n=== Test: Search for Firecrawl ===");
         
@@ -239,7 +244,7 @@ class SearchTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchComprehensive() {
         System.out.println("\n=== Test: Search with All Options ===");
         
@@ -273,7 +278,7 @@ class SearchTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchContentVerification() {
         System.out.println("\n=== Test: Search Content Verification ===");
         
@@ -304,7 +309,7 @@ class SearchTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchIgnoreInvalidURLs() {
         System.out.println("\n=== Test: Search with Ignore Invalid URLs ===");
         
