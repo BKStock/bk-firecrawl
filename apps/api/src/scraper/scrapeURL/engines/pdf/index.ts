@@ -71,6 +71,16 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
       const ct = file.response.headers.get("Content-Type");
       if (ct && !ct.includes("application/pdf")) {
         // if downloaded file wasn't a PDF
+        meta.logger.warn(
+          "Non-PDF content received in PDF engine (buffer path)",
+          {
+            url: meta.rewrittenUrl ?? meta.url,
+            contentType: ct,
+            statusCode: file.response.status,
+            pdfPrefetch: meta.pdfPrefetch !== undefined,
+            hasPdfFeature: meta.featureFlags.has("pdf"),
+          },
+        );
         if (meta.pdfPrefetch === undefined) {
           // for non-PDF URLs, this is expected, not anti-bot
           if (!meta.featureFlags.has("pdf")) {
@@ -116,6 +126,13 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
       const ct = r.headers.get("Content-Type");
       if (ct && !ct.includes("application/pdf")) {
         // if downloaded file wasn't a PDF
+        meta.logger.warn("Non-PDF content received in PDF engine (file path)", {
+          url: meta.rewrittenUrl ?? meta.url,
+          contentType: ct,
+          statusCode: r.status,
+          pdfPrefetch: meta.pdfPrefetch !== undefined,
+          hasPdfFeature: meta.featureFlags.has("pdf"),
+        });
         if (meta.pdfPrefetch === undefined) {
           // for non-PDF URLs, this is expected, not anti-bot
           if (!meta.featureFlags.has("pdf")) {
