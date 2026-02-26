@@ -99,7 +99,7 @@ class FirecrawlClientTest {
     // ================================================================
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testScrapeE2E() {
         FirecrawlClient client = FirecrawlClient.fromEnv();
         Document doc = client.scrape("https://example.com",
@@ -113,7 +113,7 @@ class FirecrawlClientTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testMapE2E() {
         FirecrawlClient client = FirecrawlClient.fromEnv();
         MapData data = client.map("https://example.com",
@@ -126,7 +126,7 @@ class FirecrawlClientTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testCrawlE2E() {
         FirecrawlClient client = FirecrawlClient.fromEnv();
         CrawlJob job = client.crawl("https://example.com",
@@ -142,7 +142,7 @@ class FirecrawlClientTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testSearchE2E() {
         FirecrawlClient client = FirecrawlClient.fromEnv();
         SearchData data = client.search("firecrawl web scraping",
@@ -154,7 +154,7 @@ class FirecrawlClientTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testConcurrencyE2E() {
         FirecrawlClient client = FirecrawlClient.fromEnv();
         ConcurrencyCheck check = client.getConcurrency();
@@ -164,7 +164,7 @@ class FirecrawlClientTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "FIRECRAWL_API_KEY", matches = ".*\\S.*")
     void testCreditUsageE2E() {
         FirecrawlClient client = FirecrawlClient.fromEnv();
         CreditUsage usage = client.getCreditUsage();
