@@ -6,6 +6,12 @@ on:
       - main
     paths:
       - apps/java-sdk/**
+  push:
+    branches:
+      - main
+    paths:
+      - apps/java-sdk/**
+  workflow_dispatch:
 
 jobs:
   build-and-test:
