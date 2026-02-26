@@ -3,6 +3,7 @@ import {
   buildSearchQuery,
   getCategoryFromUrl,
   getDefaultResearchSites,
+  normalizeSiteOperators,
 } from "../../lib/search-query-builder";
 
 describe("Search Query Builder", () => {
@@ -220,6 +221,66 @@ describe("Search Query Builder", () => {
     });
   });
 
+  describe("normalizeSiteOperators", () => {
+    it("should strip https:// from site: values", () => {
+      expect(normalizeSiteOperators("site:https://example.com")).toBe(
+        "site:example.com",
+      );
+    });
+
+    it("should strip http:// from site: values", () => {
+      expect(normalizeSiteOperators("site:http://example.com")).toBe(
+        "site:example.com",
+      );
+    });
+
+    it("should preserve paths after stripping protocol", () => {
+      expect(
+        normalizeSiteOperators("site:https://example.com/path/to/page"),
+      ).toBe("site:example.com/path/to/page");
+    });
+
+    it("should leave values without protocol unchanged", () => {
+      expect(normalizeSiteOperators("site:example.com/docs/api")).toBe(
+        "site:example.com/docs/api",
+      );
+    });
+
+    it("should leave already-clean site: values unchanged", () => {
+      expect(normalizeSiteOperators("site:example.com")).toBe(
+        "site:example.com",
+      );
+    });
+
+    it("should handle multiple site: operators in a query", () => {
+      expect(
+        normalizeSiteOperators(
+          "test site:https://a.com/path site:http://b.org/x",
+        ),
+      ).toBe("test site:a.com/path site:b.org/x");
+    });
+
+    it("should preserve the rest of the query", () => {
+      expect(
+        normalizeSiteOperators(
+          'machine learning "neural networks" site:https://example.com/foo',
+        ),
+      ).toBe('machine learning "neural networks" site:example.com/foo');
+    });
+
+    it("should be case-insensitive for the protocol", () => {
+      expect(normalizeSiteOperators("site:HTTPS://Example.COM/path")).toBe(
+        "site:Example.COM/path",
+      );
+    });
+
+    it("should handle queries with no site: operators", () => {
+      expect(normalizeSiteOperators("just a normal query")).toBe(
+        "just a normal query",
+      );
+    });
+  });
+
   describe("Integration tests", () => {
     it("should handle complex real-world query", () => {
       const result = buildSearchQuery(
@@ -239,6 +300,23 @@ describe("Search Query Builder", () => {
 
       expect(getCategoryFromUrl(githubUrl, result.categoryMap)).toBe("github");
       expect(getCategoryFromUrl(arxivUrl, result.categoryMap)).toBe("research");
+    });
+
+    it("should normalize site: operators in base query", () => {
+      const result = buildSearchQuery(
+        "test site:https://stackoverflow.com/questions",
+      );
+      expect(result.query).toBe("test site:stackoverflow.com/questions");
+    });
+
+    it("should normalize site: operators in base query with categories", () => {
+      const result = buildSearchQuery(
+        "test site:https://stackoverflow.com/questions",
+        ["github"],
+      );
+      expect(result.query).toBe(
+        "test site:stackoverflow.com/questions (site:github.com)",
+      );
     });
 
     it("should handle empty query with categories", () => {

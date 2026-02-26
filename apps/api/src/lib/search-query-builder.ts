@@ -35,24 +35,12 @@ const DEFAULT_RESEARCH_SITES = [
 
 /**
  * Normalizes `site:` operators in a query string by stripping
- * http(s):// prefixes and trailing paths, leaving only the hostname.
- * e.g. "site:https://example.com/path" → "site:example.com"
+ * http(s):// prefixes from the value.
+ * e.g. "site:https://example.com/path" → "site:example.com/path"
  */
 export function normalizeSiteOperators(query: string): string {
   return query.replace(/site:(\S+)/gi, (_match, value: string) => {
-    try {
-      // If the value has a protocol, parse it as a URL to extract the hostname
-      if (/^https?:\/\//i.test(value)) {
-        const url = new URL(value);
-        return `site:${url.hostname}`;
-      }
-      // No protocol — strip any trailing path (everything after the first `/`)
-      const hostname = value.split("/")[0];
-      return `site:${hostname}`;
-    } catch {
-      // If URL parsing fails, strip trailing path as a best-effort fallback
-      return `site:${value.split("/")[0]}`;
-    }
+    return `site:${value.replace(/^https?:\/\//i, "")}`;
   });
 }
 
