@@ -26,13 +26,7 @@ import type { PDFProcessorResult } from "./types";
 import { scrapePDFWithRunPodMU } from "./runpodMU";
 import { scrapePDFWithParsePDF } from "./pdfParse";
 import { captureExceptionWithZdrCheck } from "../../../../services/sentry";
-
-const PDF_MAGIC = Buffer.from("%PDF");
-
-/** Check if a buffer starts with the %PDF magic bytes. */
-function isPdfBuffer(buf: Buffer): boolean {
-  return buf.length >= 4 && buf.subarray(0, 4).equals(PDF_MAGIC);
-}
+import { isPdfBuffer, PDF_SNIFF_WINDOW } from "./pdfUtils";
 
 /** Check if the PDF is eligible for Rust extraction, returning a rejection reason or null. */
 function getIneligibleReason(
@@ -117,15 +111,21 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
 
   try {
     // Validate the downloaded file is actually a PDF by checking magic bytes
-    const header = Buffer.alloc(4);
+    const header = Buffer.alloc(PDF_SNIFF_WINDOW);
     const fh = await open(tempFilePath, "r");
+    let headerBytesRead: number;
     try {
-      await fh.read(header, 0, 4, 0);
+      ({ bytesRead: headerBytesRead } = await fh.read(
+        header,
+        0,
+        PDF_SNIFF_WINDOW,
+        0,
+      ));
     } finally {
       await fh.close();
     }
 
-    if (!isPdfBuffer(header)) {
+    if (!isPdfBuffer(header.subarray(0, headerBytesRead))) {
       if (meta.pdfPrefetch === undefined) {
         if (!meta.featureFlags.has("pdf")) {
           throw new EngineUnsuccessfulError("pdf");
