@@ -25,7 +25,7 @@ public class AgentStatusResponse {
     public Integer getCreditsUsed() { return creditsUsed; }
 
     public boolean isDone() {
-        return "completed".equals(status) || "failed".equals(status);
+        return "completed".equals(status) || "failed".equals(status) || "cancelled".equals(status);
     }
 
     @Override
