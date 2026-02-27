@@ -54,3 +54,12 @@ jobs:
         env:
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
         run: ./gradlew test
+
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Java SDK Test Report
+          path: apps/java-sdk/build/test-results/test/*.xml
+          reporter: java-junit
+          fail-on-error: true
