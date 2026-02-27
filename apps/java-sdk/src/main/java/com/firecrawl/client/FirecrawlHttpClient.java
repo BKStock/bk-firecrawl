@@ -10,6 +10,7 @@ import com.firecrawl.errors.RateLimitException;
 import okhttp3.*;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -49,6 +50,13 @@ class FirecrawlHttpClient {
      * Sends a POST request with JSON body.
      */
     <T> T post(String path, Object body, Class<T> responseType) {
+        return post(path, body, responseType, Collections.emptyMap());
+    }
+
+    /**
+     * Sends a POST request with JSON body and extra headers.
+     */
+    <T> T post(String path, Object body, Class<T> responseType, Map<String, String> extraHeaders) {
         String url = baseUrl + path;
         String json;
         try {
@@ -57,12 +65,15 @@ class FirecrawlHttpClient {
             throw new FirecrawlException("Failed to serialize request body", e);
         }
         RequestBody requestBody = RequestBody.create(json, JSON);
-        Request request = new Request.Builder()
+        Request.Builder builder = new Request.Builder()
                 .url(url)
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", "application/json")
-                .post(requestBody)
-                .build();
+                .post(requestBody);
+        for (Map.Entry<String, String> entry : extraHeaders.entrySet()) {
+            builder.header(entry.getKey(), entry.getValue());
+        }
+        Request request = builder.build();
         return executeWithRetry(request, responseType);
     }
 

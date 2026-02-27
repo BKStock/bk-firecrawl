@@ -1,5 +1,6 @@
 package com.firecrawl.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
@@ -14,6 +15,7 @@ public class BatchScrapeOptions {
     private Boolean ignoreInvalidURLs;
     private Integer maxConcurrency;
     private Boolean zeroDataRetention;
+    @JsonIgnore
     private String idempotencyKey;
     private String integration;
 
@@ -25,6 +27,7 @@ public class BatchScrapeOptions {
     public Boolean getIgnoreInvalidURLs() { return ignoreInvalidURLs; }
     public Integer getMaxConcurrency() { return maxConcurrency; }
     public Boolean getZeroDataRetention() { return zeroDataRetention; }
+    @JsonIgnore
     public String getIdempotencyKey() { return idempotencyKey; }
     public String getIntegration() { return integration; }
 

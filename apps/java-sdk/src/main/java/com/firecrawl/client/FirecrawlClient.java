@@ -198,16 +198,27 @@ public class FirecrawlClient {
         Objects.requireNonNull(urls, "URLs list is required");
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("urls", urls);
+        Map<String, String> extraHeaders = Collections.emptyMap();
         if (options != null) {
+            // Extract idempotencyKey before serialization — it must be sent as an
+            // HTTP header (x-idempotency-key), not in the JSON body.
+            String idempotencyKey = options.getIdempotencyKey();
+            if (idempotencyKey != null && !idempotencyKey.isEmpty()) {
+                extraHeaders = Collections.singletonMap("x-idempotency-key", idempotencyKey);
+            }
+
             mergeOptions(body, options);
             // The API expects scrape options flattened at the top level, not nested
-            // under an "options" key. Extract and flatten them.
+            // under an "options" key. Extract and flatten them, but preserve
+            // batch-level fields so they are not overwritten by scrape options.
             Map<String, Object> nested = (Map<String, Object>) body.remove("options");
             if (nested != null) {
+                Map<String, Object> batchFields = new LinkedHashMap<>(body);
                 body.putAll(nested);
+                body.putAll(batchFields);
             }
         }
-        return http.post("/v2/batch/scrape", body, BatchScrapeResponse.class);
+        return http.post("/v2/batch/scrape", body, BatchScrapeResponse.class, extraHeaders);
     }
 
     /**
