@@ -126,7 +126,7 @@ export async function scrapePDF(meta: Meta): Promise<EngineScrapeResult> {
     }
 
     if (!isPdfBuffer(header.subarray(0, headerBytesRead))) {
-      if (meta.pdfPrefetch !== undefined) {
+      if (meta.pdfPrefetch !== undefined || meta.featureFlags.has("pdf")) {
         meta.logger.warn(
           "Non-PDF content received in PDF engine (file path)",
           {
