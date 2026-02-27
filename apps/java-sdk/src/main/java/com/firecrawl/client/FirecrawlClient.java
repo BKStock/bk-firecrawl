@@ -193,12 +193,19 @@ public class FirecrawlClient {
      * @param options batch scrape configuration options
      * @return the batch job reference with ID
      */
+    @SuppressWarnings("unchecked")
     public BatchScrapeResponse startBatchScrape(List<String> urls, BatchScrapeOptions options) {
         Objects.requireNonNull(urls, "URLs list is required");
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("urls", urls);
         if (options != null) {
             mergeOptions(body, options);
+            // The API expects scrape options flattened at the top level, not nested
+            // under an "options" key. Extract and flatten them.
+            Map<String, Object> nested = (Map<String, Object>) body.remove("options");
+            if (nested != null) {
+                body.putAll(nested);
+            }
         }
         return http.post("/v2/batch/scrape", body, BatchScrapeResponse.class);
     }
