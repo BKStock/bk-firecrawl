@@ -1,8 +1,8 @@
 import { Logger } from "winston";
 import { getACUCTeam } from "../controllers/auth";
 import { getRedisConnection } from "../services/queue-service";
-import { scrapeQueue } from "../services/worker/nuq";
-import { RateLimiterMode } from "../types";
+import { scrapeQueue, type NuQJob } from "../services/worker/nuq";
+import { RateLimiterMode, type ScrapeJobData } from "../types";
 import {
   getConcurrencyLimitActiveJobs,
   pushConcurrencyLimitActiveJob,
@@ -24,10 +24,33 @@ interface ReconcileResult {
   jobsStarted: number;
 }
 
-function getBacklogJobTimeout(jobData: any): number {
-  return jobData?.crawl_id
-    ? Infinity
-    : (jobData?.scrapeOptions?.timeout ?? 60 * 1000);
+function isExtractJob(data: ScrapeJobData): boolean {
+  return "is_extract" in data && !!data.is_extract;
+}
+
+function getBacklogJobTimeout(jobData: ScrapeJobData): number {
+  if (jobData.crawl_id) return Infinity;
+
+  if ("scrapeOptions" in jobData && jobData.scrapeOptions?.timeout)
+    return jobData.scrapeOptions.timeout;
+
+  return 60 * 1000;
+}
+
+async function requeueJob(
+  ownerId: string,
+  job: NuQJob<ScrapeJobData>,
+): Promise<void> {
+  await pushConcurrencyLimitedJob(
+    ownerId,
+    {
+      id: job.id,
+      data: job.data,
+      priority: job.priority,
+      listenable: job.listenChannelId !== undefined,
+    },
+    getBacklogJobTimeout(job.data),
+  );
 }
 
 async function getQueuedJobIDs(teamId: string): Promise<Set<string>> {
@@ -50,6 +73,123 @@ async function getQueuedJobIDs(teamId: string): Promise<Set<string>> {
   } while (cursor !== "0");
 
   return queuedJobIDs;
+}
+
+async function reconcileTeam(
+  ownerId: string,
+  teamLogger: Logger,
+): Promise<{ jobsStarted: number; jobsRequeued: number } | null> {
+  const backloggedJobIDs = new Set(
+    await scrapeQueue.getBackloggedJobIDsOfOnwer(ownerId, teamLogger),
+  );
+  if (backloggedJobIDs.size === 0) {
+    return null;
+  }
+
+  const queuedJobIDs = await getQueuedJobIDs(ownerId);
+  const missingJobIDs = [...backloggedJobIDs].filter(x => !queuedJobIDs.has(x));
+
+  if (missingJobIDs.length === 0) {
+    return null;
+  }
+
+  const jobsToRecover = await scrapeQueue.getJobsFromBacklog(
+    missingJobIDs,
+    teamLogger,
+  );
+  if (jobsToRecover.length === 0) {
+    return null;
+  }
+
+  const maxCrawlConcurrency =
+    (await getACUCTeam(ownerId, false, true, RateLimiterMode.Crawl))
+      ?.concurrency ?? 2;
+  const maxExtractConcurrency =
+    (await getACUCTeam(ownerId, false, true, RateLimiterMode.Extract))
+      ?.concurrency ?? 2;
+
+  // Split active count by type so one type's active jobs don't gate the other
+  const activeJobIds = await getConcurrencyLimitActiveJobs(ownerId);
+  const activeJobs = await scrapeQueue.getJobs(activeJobIds, teamLogger);
+  let activeCrawlCount = 0;
+  let activeExtractCount = 0;
+  for (const aj of activeJobs) {
+    if (isExtractJob(aj.data)) {
+      activeExtractCount++;
+    } else {
+      activeCrawlCount++;
+    }
+  }
+
+  const jobsToStart: typeof jobsToRecover = [];
+  const jobsToQueue: typeof jobsToRecover = [];
+
+  for (const job of jobsToRecover) {
+    const isExtract = isExtractJob(job.data);
+    const teamLimit = isExtract ? maxExtractConcurrency : maxCrawlConcurrency;
+    const activeCount = isExtract ? activeExtractCount : activeCrawlCount;
+
+    if (activeCount < teamLimit) {
+      jobsToStart.push(job);
+      if (isExtract) activeExtractCount++;
+      else activeCrawlCount++;
+    } else {
+      jobsToQueue.push(job);
+    }
+  }
+
+  let jobsStarted = 0;
+  let jobsRequeued = 0;
+
+  for (const job of jobsToQueue) {
+    await requeueJob(ownerId, job);
+    jobsRequeued++;
+  }
+
+  for (const job of jobsToStart) {
+    const promoted = await scrapeQueue.promoteJobFromBacklogOrAdd(
+      job.id,
+      job.data,
+      {
+        priority: job.priority,
+        listenable: job.listenChannelId !== undefined,
+        ownerId: job.data.team_id ?? undefined,
+        groupId: job.data.crawl_id ?? undefined,
+      },
+    );
+
+    if (promoted !== null) {
+      await pushConcurrencyLimitActiveJob(ownerId, job.id, 60 * 1000);
+
+      if (job.data.crawl_id) {
+        const sc = await getCrawl(job.data.crawl_id);
+        if (sc?.crawlerOptions?.delay || sc?.maxConcurrency) {
+          await pushCrawlConcurrencyLimitActiveJob(
+            job.data.crawl_id,
+            job.id,
+            60 * 1000,
+          );
+        }
+      }
+
+      jobsStarted++;
+    } else {
+      teamLogger.warn("Job promotion failed, re-queuing job", {
+        jobId: job.id,
+      });
+      await requeueJob(ownerId, job);
+      jobsRequeued++;
+    }
+  }
+
+  teamLogger.info("Recovered drift in concurrency queue", {
+    missingJobs: missingJobIDs.length,
+    recoveredJobs: jobsToRecover.length,
+    requeuedJobs: jobsRequeued,
+    startedJobs: jobsStarted,
+  });
+
+  return { jobsStarted, jobsRequeued };
 }
 
 export async function reconcileConcurrencyQueue(
@@ -77,142 +217,12 @@ export async function reconcileConcurrencyQueue(
     const teamLogger = logger.child({ teamId: ownerId });
 
     try {
-      const backloggedJobIDs = new Set(
-        await scrapeQueue.getBackloggedJobIDsOfOnwer(ownerId, teamLogger),
-      );
-      if (backloggedJobIDs.size === 0) {
-        continue;
+      const teamResult = await reconcileTeam(ownerId, teamLogger);
+      if (teamResult !== null) {
+        result.teamsWithDrift++;
+        result.jobsStarted += teamResult.jobsStarted;
+        result.jobsRequeued += teamResult.jobsRequeued;
       }
-
-      const queuedJobIDs = await getQueuedJobIDs(ownerId);
-      const missingJobIDs = [...backloggedJobIDs].filter(
-        x => !queuedJobIDs.has(x),
-      );
-
-      if (missingJobIDs.length === 0) {
-        continue;
-      }
-
-      result.teamsWithDrift++;
-
-      const jobsToRecover = await scrapeQueue.getJobsFromBacklog(
-        missingJobIDs,
-        teamLogger,
-      );
-      if (jobsToRecover.length === 0) {
-        continue;
-      }
-
-      const maxCrawlConcurrency =
-        (await getACUCTeam(ownerId, false, true, RateLimiterMode.Crawl))
-          ?.concurrency ?? 2;
-      const maxExtractConcurrency =
-        (await getACUCTeam(ownerId, false, true, RateLimiterMode.Extract))
-          ?.concurrency ?? 2;
-
-      // Split active count by type so one type's active jobs don't gate the other
-      const activeJobIds = await getConcurrencyLimitActiveJobs(ownerId);
-      const activeJobs = await scrapeQueue.getJobs(activeJobIds, teamLogger);
-      let activeCrawlCount = 0;
-      let activeExtractCount = 0;
-      for (const aj of activeJobs) {
-        if ("is_extract" in aj.data && aj.data.is_extract) {
-          activeExtractCount++;
-        } else {
-          activeCrawlCount++;
-        }
-      }
-
-      const jobsToStart: typeof jobsToRecover = [];
-      const jobsToQueue: typeof jobsToRecover = [];
-
-      for (const job of jobsToRecover) {
-        const isExtract = "is_extract" in job.data && job.data.is_extract;
-        const teamLimit = isExtract
-          ? maxExtractConcurrency
-          : maxCrawlConcurrency;
-        const activeCount = isExtract ? activeExtractCount : activeCrawlCount;
-
-        if (activeCount < teamLimit) {
-          jobsToStart.push(job);
-          if (isExtract) activeExtractCount++;
-          else activeCrawlCount++;
-        } else {
-          jobsToQueue.push(job);
-        }
-      }
-
-      let teamJobsStarted = 0;
-      let teamJobsRequeued = 0;
-
-      for (const job of jobsToQueue) {
-        await pushConcurrencyLimitedJob(
-          ownerId,
-          {
-            id: job.id,
-            data: job.data,
-            priority: job.priority,
-            listenable: job.listenChannelId !== undefined,
-          },
-          getBacklogJobTimeout(job.data),
-        );
-        teamJobsRequeued++;
-        result.jobsRequeued++;
-      }
-
-      for (const job of jobsToStart) {
-        const promoted = await scrapeQueue.promoteJobFromBacklogOrAdd(
-          job.id,
-          job.data,
-          {
-            priority: job.priority,
-            listenable: job.listenChannelId !== undefined,
-            ownerId: job.data.team_id ?? undefined,
-            groupId: job.data.crawl_id ?? undefined,
-          },
-        );
-
-        if (promoted !== null) {
-          await pushConcurrencyLimitActiveJob(ownerId, job.id, 60 * 1000);
-
-          if (job.data.crawl_id) {
-            const sc = await getCrawl(job.data.crawl_id);
-            if (sc?.crawlerOptions?.delay || sc?.maxConcurrency) {
-              await pushCrawlConcurrencyLimitActiveJob(
-                job.data.crawl_id,
-                job.id,
-                60 * 1000,
-              );
-            }
-          }
-
-          teamJobsStarted++;
-          result.jobsStarted++;
-        } else {
-          teamLogger.warn("Job promotion failed, re-queuing job", {
-            jobId: job.id,
-          });
-          await pushConcurrencyLimitedJob(
-            ownerId,
-            {
-              id: job.id,
-              data: job.data,
-              priority: job.priority,
-              listenable: job.listenChannelId !== undefined,
-            },
-            getBacklogJobTimeout(job.data),
-          );
-          teamJobsRequeued++;
-          result.jobsRequeued++;
-        }
-      }
-
-      teamLogger.info("Recovered drift in concurrency queue", {
-        missingJobs: missingJobIDs.length,
-        recoveredJobs: jobsToRecover.length,
-        requeuedJobs: teamJobsRequeued,
-        startedJobs: teamJobsStarted,
-      });
     } catch (error) {
       teamLogger.error("Failed to reconcile team, skipping", { error });
     }
