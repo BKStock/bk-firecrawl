@@ -74,97 +74,118 @@ export async function reconcileConcurrencyQueue(
   for (const ownerId of ownerIds) {
     const teamLogger = logger.child({ teamId: ownerId });
 
-    const backloggedJobIDs = new Set(
-      await scrapeQueue.getBackloggedJobIDsOfOnwer(ownerId, teamLogger),
-    );
-    if (backloggedJobIDs.size === 0) {
-      continue;
-    }
-
-    const queuedJobIDs = await getQueuedJobIDs(ownerId);
-    const missingJobIDs = [...backloggedJobIDs].filter(
-      x => !queuedJobIDs.has(x),
-    );
-
-    if (missingJobIDs.length === 0) {
-      continue;
-    }
-
-    result.teamsWithDrift++;
-
-    const jobsToRecover = await scrapeQueue.getJobsFromBacklog(
-      missingJobIDs,
-      teamLogger,
-    );
-    if (jobsToRecover.length === 0) {
-      continue;
-    }
-
-    const maxCrawlConcurrency =
-      (await getACUCTeam(ownerId, false, true, RateLimiterMode.Crawl))
-        ?.concurrency ?? 2;
-    const maxExtractConcurrency =
-      (await getACUCTeam(ownerId, false, true, RateLimiterMode.Extract))
-        ?.concurrency ?? 2;
-
-    const currentActiveConcurrency = (
-      await getConcurrencyLimitActiveJobs(ownerId)
-    ).length;
-
-    const jobsToStart: typeof jobsToRecover = [];
-    const jobsToQueue: typeof jobsToRecover = [];
-
-    let activeCount = currentActiveConcurrency;
-    for (const job of jobsToRecover) {
-      const isExtract = "is_extract" in job.data && job.data.is_extract;
-      const teamLimit = isExtract ? maxExtractConcurrency : maxCrawlConcurrency;
-
-      if (activeCount < teamLimit) {
-        jobsToStart.push(job);
-        activeCount++;
-      } else {
-        jobsToQueue.push(job);
-      }
-    }
-
-    for (const job of jobsToQueue) {
-      await pushConcurrencyLimitedJob(
-        ownerId,
-        {
-          id: job.id,
-          data: job.data,
-          priority: job.priority,
-          listenable: job.listenChannelId !== undefined,
-        },
-        getBacklogJobTimeout(job.data),
+    try {
+      const backloggedJobIDs = new Set(
+        await scrapeQueue.getBackloggedJobIDsOfOnwer(ownerId, teamLogger),
       );
-      result.jobsRequeued++;
-    }
+      if (backloggedJobIDs.size === 0) {
+        continue;
+      }
 
-    for (const job of jobsToStart) {
-      const promoted = await scrapeQueue.promoteJobFromBacklogOrAdd(
-        job.id,
-        job.data,
-        {
-          priority: job.priority,
-          listenable: job.listenChannelId !== undefined,
-          ownerId: job.data.team_id ?? undefined,
-          groupId: job.data.crawl_id ?? undefined,
-        },
+      const queuedJobIDs = await getQueuedJobIDs(ownerId);
+      const missingJobIDs = [...backloggedJobIDs].filter(
+        x => !queuedJobIDs.has(x),
       );
 
-      if (promoted !== null) {
-        await pushConcurrencyLimitActiveJob(ownerId, job.id, 60 * 1000);
-        result.jobsStarted++;
+      if (missingJobIDs.length === 0) {
+        continue;
       }
-    }
 
-    teamLogger.info("Recovered drift in concurrency queue", {
-      missingJobs: missingJobIDs.length,
-      recoveredJobs: jobsToRecover.length,
-      requeuedJobs: jobsToQueue.length,
-      startedJobs: jobsToStart.length,
-    });
+      result.teamsWithDrift++;
+
+      const jobsToRecover = await scrapeQueue.getJobsFromBacklog(
+        missingJobIDs,
+        teamLogger,
+      );
+      if (jobsToRecover.length === 0) {
+        continue;
+      }
+
+      const maxCrawlConcurrency =
+        (await getACUCTeam(ownerId, false, true, RateLimiterMode.Crawl))
+          ?.concurrency ?? 2;
+      const maxExtractConcurrency =
+        (await getACUCTeam(ownerId, false, true, RateLimiterMode.Extract))
+          ?.concurrency ?? 2;
+
+      const currentActiveConcurrency = (
+        await getConcurrencyLimitActiveJobs(ownerId)
+      ).length;
+
+      const jobsToStart: typeof jobsToRecover = [];
+      const jobsToQueue: typeof jobsToRecover = [];
+
+      let activeCount = currentActiveConcurrency;
+      for (const job of jobsToRecover) {
+        const isExtract = "is_extract" in job.data && job.data.is_extract;
+        const teamLimit = isExtract
+          ? maxExtractConcurrency
+          : maxCrawlConcurrency;
+
+        if (activeCount < teamLimit) {
+          jobsToStart.push(job);
+          activeCount++;
+        } else {
+          jobsToQueue.push(job);
+        }
+      }
+
+      for (const job of jobsToQueue) {
+        await pushConcurrencyLimitedJob(
+          ownerId,
+          {
+            id: job.id,
+            data: job.data,
+            priority: job.priority,
+            listenable: job.listenChannelId !== undefined,
+          },
+          getBacklogJobTimeout(job.data),
+        );
+        result.jobsRequeued++;
+      }
+
+      for (const job of jobsToStart) {
+        const promoted = await scrapeQueue.promoteJobFromBacklogOrAdd(
+          job.id,
+          job.data,
+          {
+            priority: job.priority,
+            listenable: job.listenChannelId !== undefined,
+            ownerId: job.data.team_id ?? undefined,
+            groupId: job.data.crawl_id ?? undefined,
+          },
+        );
+
+        if (promoted !== null) {
+          await pushConcurrencyLimitActiveJob(ownerId, job.id, 60 * 1000);
+          result.jobsStarted++;
+        } else {
+          teamLogger.warn("Job promotion failed, re-queuing job", {
+            jobId: job.id,
+          });
+          await pushConcurrencyLimitedJob(
+            ownerId,
+            {
+              id: job.id,
+              data: job.data,
+              priority: job.priority,
+              listenable: job.listenChannelId !== undefined,
+            },
+            getBacklogJobTimeout(job.data),
+          );
+          result.jobsRequeued++;
+        }
+      }
+
+      teamLogger.info("Recovered drift in concurrency queue", {
+        missingJobs: missingJobIDs.length,
+        recoveredJobs: jobsToRecover.length,
+        requeuedJobs: jobsToQueue.length,
+        startedJobs: jobsToStart.length,
+      });
+    } catch (error) {
+      teamLogger.error("Failed to reconcile team, skipping", { error });
+    }
   }
 
   return result;
