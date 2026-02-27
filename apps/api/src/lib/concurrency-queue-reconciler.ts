@@ -130,6 +130,9 @@ export async function reconcileConcurrencyQueue(
         }
       }
 
+      let teamJobsStarted = 0;
+      let teamJobsRequeued = 0;
+
       for (const job of jobsToQueue) {
         await pushConcurrencyLimitedJob(
           ownerId,
@@ -141,6 +144,7 @@ export async function reconcileConcurrencyQueue(
           },
           getBacklogJobTimeout(job.data),
         );
+        teamJobsRequeued++;
         result.jobsRequeued++;
       }
 
@@ -158,6 +162,7 @@ export async function reconcileConcurrencyQueue(
 
         if (promoted !== null) {
           await pushConcurrencyLimitActiveJob(ownerId, job.id, 60 * 1000);
+          teamJobsStarted++;
           result.jobsStarted++;
         } else {
           teamLogger.warn("Job promotion failed, re-queuing job", {
@@ -173,6 +178,7 @@ export async function reconcileConcurrencyQueue(
             },
             getBacklogJobTimeout(job.data),
           );
+          teamJobsRequeued++;
           result.jobsRequeued++;
         }
       }
@@ -180,8 +186,8 @@ export async function reconcileConcurrencyQueue(
       teamLogger.info("Recovered drift in concurrency queue", {
         missingJobs: missingJobIDs.length,
         recoveredJobs: jobsToRecover.length,
-        requeuedJobs: jobsToQueue.length,
-        startedJobs: jobsToStart.length,
+        requeuedJobs: teamJobsRequeued,
+        startedJobs: teamJobsStarted,
       });
     } catch (error) {
       teamLogger.error("Failed to reconcile team, skipping", { error });
