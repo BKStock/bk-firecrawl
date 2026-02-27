@@ -670,9 +670,9 @@ class NuQ<JobData = any, JobReturnValue = any> {
         )
       ).rows.map(row => row.id);
     } finally {
-      _logger.info("nuqgetBackloggedJobIDsOfOwner metrics", {
+      _logger.info("nuqGetBackloggedJobIDsOfOwner metrics", {
         module: "nuq/metrics",
-        method: "nuqgetBackloggedJobIDsOfOwner",
+        method: "nuqGetBackloggedJobIDsOfOwner",
         duration: Date.now() - start,
         ownerId,
       });
