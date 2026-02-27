@@ -7,7 +7,9 @@ import {
   getConcurrencyLimitActiveJobs,
   pushConcurrencyLimitActiveJob,
   pushConcurrencyLimitedJob,
+  pushCrawlConcurrencyLimitActiveJob,
 } from "./concurrency-limit";
+import { getCrawl } from "./crawl-redis";
 import { logger as _logger } from "./logger";
 
 interface ReconcileOptions {
@@ -108,23 +110,33 @@ export async function reconcileConcurrencyQueue(
         (await getACUCTeam(ownerId, false, true, RateLimiterMode.Extract))
           ?.concurrency ?? 2;
 
-      const currentActiveConcurrency = (
-        await getConcurrencyLimitActiveJobs(ownerId)
-      ).length;
+      // Split active count by type so one type's active jobs don't gate the other
+      const activeJobIds = await getConcurrencyLimitActiveJobs(ownerId);
+      const activeJobs = await scrapeQueue.getJobs(activeJobIds, teamLogger);
+      let activeCrawlCount = 0;
+      let activeExtractCount = 0;
+      for (const aj of activeJobs) {
+        if ("is_extract" in aj.data && aj.data.is_extract) {
+          activeExtractCount++;
+        } else {
+          activeCrawlCount++;
+        }
+      }
 
       const jobsToStart: typeof jobsToRecover = [];
       const jobsToQueue: typeof jobsToRecover = [];
 
-      let activeCount = currentActiveConcurrency;
       for (const job of jobsToRecover) {
         const isExtract = "is_extract" in job.data && job.data.is_extract;
         const teamLimit = isExtract
           ? maxExtractConcurrency
           : maxCrawlConcurrency;
+        const activeCount = isExtract ? activeExtractCount : activeCrawlCount;
 
         if (activeCount < teamLimit) {
           jobsToStart.push(job);
-          activeCount++;
+          if (isExtract) activeExtractCount++;
+          else activeCrawlCount++;
         } else {
           jobsToQueue.push(job);
         }
@@ -162,6 +174,18 @@ export async function reconcileConcurrencyQueue(
 
         if (promoted !== null) {
           await pushConcurrencyLimitActiveJob(ownerId, job.id, 60 * 1000);
+
+          if (job.data.crawl_id) {
+            const sc = await getCrawl(job.data.crawl_id);
+            if (sc?.crawlerOptions?.delay || sc?.maxConcurrency) {
+              await pushCrawlConcurrencyLimitActiveJob(
+                job.data.crawl_id,
+                job.id,
+                60 * 1000,
+              );
+            }
+          }
+
           teamJobsStarted++;
           result.jobsStarted++;
         } else {
